@@ -12,6 +12,7 @@ Primary goals:
 - transport and observability baseline
 - reusable infra helpers without product coupling
 - foundation-first composition for service apps, not utility aggregation
+- room for selected platform-standard technical contracts when intentionally standardized
 
 Current module scope:
 

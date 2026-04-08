@@ -203,3 +203,51 @@ func TestValidate_DBConnMaxIdleTimeNegative(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestValidateIssues_ReturnStructuredIssues(t *testing.T) {
+	cfg := &Config{
+		Memcached: MemcachedConfig{
+			Enabled: true,
+		},
+	}
+
+	issues := cfg.ValidateIssues()
+	if len(issues) == 0 {
+		t.Fatalf("expected structured issues")
+	}
+
+	foundService := false
+	foundMemcached := false
+	for _, issue := range issues {
+		if issue.Field == "SERVICE_NAME" && issue.Section == "app" {
+			foundService = true
+		}
+		if issue.Field == "MEMCACHED_SERVERS" && issue.Section == "memcached" {
+			foundMemcached = true
+		}
+	}
+
+	if !foundService {
+		t.Fatalf("expected SERVICE_NAME issue in app section")
+	}
+	if !foundMemcached {
+		t.Fatalf("expected MEMCACHED_SERVERS issue in memcached section")
+	}
+}
+
+func TestValidate_ReturnsValidationErrorsType(t *testing.T) {
+	cfg := &Config{}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatalf("expected validation error")
+	}
+
+	validationErr, ok := err.(*ValidationErrors)
+	if !ok {
+		t.Fatalf("expected *ValidationErrors, got %T", err)
+	}
+	if len(validationErr.Issues) == 0 {
+		t.Fatalf("expected validation issues")
+	}
+}

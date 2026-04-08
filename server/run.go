@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yogayulanda/go-core/app"
+	"github.com/yogayulanda/go-core/logger"
 )
 
 type Startable interface {
@@ -33,6 +34,16 @@ func Run(ctx context.Context, application *app.App, components ...Startable) err
 	if application == nil {
 		return fmt.Errorf("application is nil")
 	}
+	log := application.Logger()
+	startedAt := time.Now()
+
+	log.LogService(ctx, logger.ServiceLog{
+		Operation: "runtime_orchestration",
+		Status:    "started",
+		Metadata: map[string]interface{}{
+			"component_slots": len(components),
+		},
+	})
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -55,10 +66,28 @@ func Run(ctx context.Context, application *app.App, components ...Startable) err
 		c := component
 		go func() {
 			name := normalizeComponentName(c.Name())
+			componentStartedAt := time.Now()
 			err := safeStart(c.Start)
 			if isExpectedServeStop(err) {
 				err = nil
 			}
+			status := "success"
+			errorCode := ""
+			metadata := map[string]interface{}{
+				"component": name,
+			}
+			if err != nil {
+				status = "failed"
+				errorCode = "component_start_failed"
+				metadata["error"] = err.Error()
+			}
+			log.LogService(runCtx, logger.ServiceLog{
+				Operation:  "component_start",
+				Status:     status,
+				DurationMs: time.Since(componentStartedAt).Milliseconds(),
+				ErrorCode:  errorCode,
+				Metadata:   metadata,
+			})
 			resultCh <- runResult{name: name, err: err}
 		}()
 	}
@@ -100,16 +129,43 @@ func Run(ctx context.Context, application *app.App, components ...Startable) err
 			wrapped := fmt.Errorf("%s failed: %w", res.name, res.err)
 			if runErr == nil {
 				runErr = wrapped
+				log.LogService(runCtx, logger.ServiceLog{
+					Operation: "runtime_orchestration",
+					Status:    "shutdown_requested",
+					ErrorCode: "component_failed",
+					Metadata: map[string]interface{}{
+						"component": res.name,
+						"error":     wrapped.Error(),
+					},
+				})
 				cancel()
 				startWaitTimer(wrapped)
 				continue
 			}
 			runErr = errors.Join(runErr, wrapped)
 		case <-ctx.Done():
+			log.LogService(runCtx, logger.ServiceLog{
+				Operation: "runtime_orchestration",
+				Status:    "shutdown_requested",
+				ErrorCode: "context_cancelled",
+				Metadata: map[string]interface{}{
+					"error": ctx.Err().Error(),
+				},
+			})
 			cancel()
 			startWaitTimer(ctx.Err())
 		case <-waitCh:
 			timeoutErr := fmt.Errorf("shutdown wait timeout after %s with %d component(s) still running", waitTimeout, pending)
+			log.LogService(context.Background(), logger.ServiceLog{
+				Operation:  "runtime_orchestration",
+				Status:     "failed",
+				DurationMs: time.Since(startedAt).Milliseconds(),
+				ErrorCode:  "shutdown_wait_timeout",
+				Metadata: map[string]interface{}{
+					"pending_components": pending,
+					"wait_timeout":       waitTimeout.String(),
+				},
+			})
 			if runErr != nil {
 				return errors.Join(runErr, timeoutErr)
 			}
@@ -120,6 +176,23 @@ func Run(ctx context.Context, application *app.App, components ...Startable) err
 		}
 	}
 
+	status := "success"
+	errorCode := ""
+	metadata := map[string]interface{}{
+		"component_count": total,
+	}
+	if runErr != nil {
+		status = "failed"
+		errorCode = "runtime_failed"
+		metadata["error"] = runErr.Error()
+	}
+	log.LogService(context.Background(), logger.ServiceLog{
+		Operation:  "runtime_orchestration",
+		Status:     status,
+		DurationMs: time.Since(startedAt).Milliseconds(),
+		ErrorCode:  errorCode,
+		Metadata:   metadata,
+	})
 	return runErr
 }
 

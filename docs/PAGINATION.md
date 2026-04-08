@@ -2,7 +2,7 @@
 
 Default for public APIs: cursor-based.
 
-For transaction-history-service (current): offset cursor string is acceptable (`cursor=offset`) with:
+For internal or legacy endpoints, offset-style cursor string is acceptable (`cursor=offset`) with:
 - capped `pageSize`
 - deterministic sort
 - `hasMore` + `nextCursor`

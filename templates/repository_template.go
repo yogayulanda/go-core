@@ -10,6 +10,8 @@ import (
 	"github.com/yogayulanda/go-core/dbtx"
 )
 
+// SQLRepositoryTemplate represents the repository layer in the golden path:
+// reuse `dbtx.FromContext(ctx)` when the service layer has already opened a transaction.
 type sqlExecutor interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }

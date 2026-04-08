@@ -22,17 +22,22 @@ Repository positioning
 - startup and runtime composition should live here
 - service business logic should not
 - generic utilities should go to `utils-shared`, not `go-core`
+- selected platform-standard technical contracts may live here when intentionally shared, such as transaction observability for transaction-oriented services
 
 Folder Structure
 
 `.ai/context`
 Contains framework context, architecture rules, ownership boundaries, and repository map.
+It also contains the current roadmap and prioritized backlog for `forge`.
 
 `.ai/prompts`
 Defines AI roles for planning, execution, fixes, tests, and review.
 
 `.ai/tasks`
 Contains task definitions for bounded changes.
+
+`.ai/STATUS.md`
+Contains the current progress snapshot across task files.
 
 Workflow
 

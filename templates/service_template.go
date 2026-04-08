@@ -7,6 +7,8 @@ import (
 	coreerrors "github.com/yogayulanda/go-core/errors"
 )
 
+// ServiceTemplate represents the service/use-case layer in the golden path:
+// validate input, define transaction boundary, call repository ports, and return app errors.
 type ServiceInput struct {
 	SubjectID string
 	Amount    int64

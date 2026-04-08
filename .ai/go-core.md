@@ -7,6 +7,7 @@ Use this file as the primary AI lens before reading deeper context.
 - It is a foundation framework repo, not a business service repo and not a generic utils dump.
 - Keep changes domain-agnostic, explicit, and safe for reuse across multiple services.
 - Shared low-level helpers that are merely generic utilities belong in `utils-shared`, not here.
+- Selected platform-standard technical contracts may live here when intentionally shared across services.
 
 ## Core Responsibility
 - bootstrap and lifecycle
@@ -15,6 +16,7 @@ Use this file as the primary AI lens before reading deeper context.
 - logging, metrics, tracing, request metadata
 - infra connectors and helpers for DB, cache, messaging, migration, retry
 - shared technical error contract and mapper
+- approved platform observability contracts for specific service classes
 
 ## Non-Goals
 - business entities or product rules
@@ -28,6 +30,23 @@ Use this file as the primary AI lens before reading deeper context.
 - avoid hidden background behavior
 - preserve explicit lifecycle wiring
 - if logic can reasonably live in a consuming service, keep it out of `go-core`
+
+## Contract Classes
+- Generic foundation contracts:
+  runtime/bootstrap building blocks expected to apply broadly.
+- Platform-standard technical contracts:
+  intentionally standardized technical contracts for a class of services.
+
+Current approved platform-standard example:
+- `logger.TransactionLog`
+- `logger.Logger.LogTransaction(...)`
+- `app_transaction_total{service,operation,status}`
+
+Current approved generic logging contracts:
+- `logger.ServiceLog`
+- `logger.Logger.LogService(...)`
+- `logger.DBLog`
+- `logger.Logger.LogDB(...)`
 
 ## Current Stage
 - Primary consumer today is `transaction-history-service`.

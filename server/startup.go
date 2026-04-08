@@ -73,13 +73,22 @@ func LogStartupReadiness(
 ) {
 	grpcReady := waitForTCP(ctx, grpcPort, timeout)
 	if grpcReady {
-		log.Info(context.Background(), "gRPC server ready",
-			logger.Field{Key: "grpc_port", Value: grpcPort},
-		)
+		log.LogService(context.Background(), logger.ServiceLog{
+			Operation: "grpc_readiness",
+			Status:    "success",
+			Metadata: map[string]interface{}{
+				"grpc_port": grpcPort,
+			},
+		})
 	} else {
-		log.Warn(context.Background(), "gRPC readiness check timeout",
-			logger.Field{Key: "grpc_port", Value: grpcPort},
-		)
+		log.LogService(context.Background(), logger.ServiceLog{
+			Operation: "grpc_readiness",
+			Status:    "failed",
+			ErrorCode: "readiness_timeout",
+			Metadata: map[string]interface{}{
+				"grpc_port": grpcPort,
+			},
+		})
 	}
 
 	gatewayReady := waitForHTTPHealth(ctx, httpPort, timeout, httpTLSEnabled)
@@ -88,21 +97,34 @@ func LogStartupReadiness(
 		if httpTLSEnabled {
 			healthScheme = "https"
 		}
-		log.Info(context.Background(), "HTTP gateway ready",
-			logger.Field{Key: "http_port", Value: httpPort},
-			logger.Field{Key: "health", Value: fmt.Sprintf("%s://127.0.0.1:%d/health", healthScheme, httpPort)},
-		)
+		log.LogService(context.Background(), logger.ServiceLog{
+			Operation: "http_gateway_readiness",
+			Status:    "success",
+			Metadata: map[string]interface{}{
+				"http_port": httpPort,
+				"health":    fmt.Sprintf("%s://127.0.0.1:%d/health", healthScheme, httpPort),
+			},
+		})
 	} else {
-		log.Warn(context.Background(), "HTTP gateway readiness check timeout",
-			logger.Field{Key: "http_port", Value: httpPort},
-		)
+		log.LogService(context.Background(), logger.ServiceLog{
+			Operation: "http_gateway_readiness",
+			Status:    "failed",
+			ErrorCode: "readiness_timeout",
+			Metadata: map[string]interface{}{
+				"http_port": httpPort,
+			},
+		})
 	}
 
 	if grpcReady && gatewayReady {
-		log.Info(context.Background(), "service ready",
-			logger.Field{Key: "grpc_port", Value: grpcPort},
-			logger.Field{Key: "http_port", Value: httpPort},
-		)
+		log.LogService(context.Background(), logger.ServiceLog{
+			Operation: "service_readiness",
+			Status:    "success",
+			Metadata: map[string]interface{}{
+				"grpc_port": grpcPort,
+				"http_port": httpPort,
+			},
+		})
 	}
 }
 

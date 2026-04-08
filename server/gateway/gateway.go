@@ -9,6 +9,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 
 	"github.com/yogayulanda/go-core/app"
+	"github.com/yogayulanda/go-core/logger"
 )
 
 type Gateway struct {
@@ -16,6 +17,7 @@ type Gateway struct {
 	tlsEnabled  bool
 	tlsCertFile string
 	tlsKeyFile  string
+	log         logger.Logger
 }
 
 func (g *Gateway) Name() string {
@@ -73,7 +75,10 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 	}
 
 	application.Lifecycle().Register(func(ctx context.Context) error {
-		log.Info(ctx, "shutting down HTTP gateway")
+		log.LogService(ctx, logger.ServiceLog{
+			Operation: "http_gateway",
+			Status:    "shutdown_requested",
+		})
 		return httpServer.Shutdown(ctx)
 	})
 
@@ -82,11 +87,20 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 		tlsEnabled:  cfg.HTTP.TLSEnabled,
 		tlsCertFile: cfg.HTTP.TLSCertFile,
 		tlsKeyFile:  cfg.HTTP.TLSKeyFile,
+		log:         log,
 	}, nil
 }
 
 // Start runs the HTTP server.
 func (g *Gateway) Start() error {
+	g.log.LogService(context.Background(), logger.ServiceLog{
+		Operation: "http_gateway",
+		Status:    "started",
+		Metadata: map[string]interface{}{
+			"address": g.server.Addr,
+			"tls":     g.tlsEnabled,
+		},
+	})
 	if g.tlsEnabled {
 		return g.server.ListenAndServeTLS(g.tlsCertFile, g.tlsKeyFile)
 	}

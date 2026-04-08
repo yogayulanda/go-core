@@ -29,10 +29,15 @@ func recoveryInterceptor(log logger.Logger) grpc.UnaryServerInterceptor {
 
 		defer func() {
 			if r := recover(); r != nil {
-				log.Error(ctx, "panic recovered",
-					logger.Field{Key: "method", Value: info.FullMethod},
-					logger.Field{Key: "panic", Value: r},
-				)
+				log.LogService(ctx, logger.ServiceLog{
+					Operation: "grpc_request",
+					Status:    "failed",
+					ErrorCode: "panic_recovered",
+					Metadata: map[string]interface{}{
+						"method": info.FullMethod,
+						"panic":  r,
+					},
+				})
 				err = status.Error(13, "internal server error")
 			}
 		}()
@@ -76,14 +81,17 @@ func loggingInterceptor(app *app.App) grpc.UnaryServerInterceptor {
 
 		requestID := observability.GetRequestID(ctx)
 
-		app.Logger().Info(ctx, "grpc_request",
-			logger.Field{Key: "method", Value: info.FullMethod},
-			logger.Field{Key: "status", Value: statusStr},
-			logger.Field{Key: "duration_ms", Value: duration},
-			logger.Field{Key: "error_code", Value: errorCode},
-			logger.Field{Key: "error_category", Value: errorCategory},
-			logger.Field{Key: "request_id", Value: requestID},
-		)
+		app.Logger().LogService(ctx, logger.ServiceLog{
+			Operation:  "grpc_request",
+			Status:     statusStr,
+			DurationMs: duration,
+			ErrorCode:  errorCode,
+			Metadata: map[string]interface{}{
+				"method":         info.FullMethod,
+				"error_category": errorCategory,
+				"request_id":     requestID,
+			},
+		})
 
 		return resp, err
 	}
@@ -119,6 +127,17 @@ func metricsInterceptor(app *app.App) grpc.UnaryServerInterceptor {
 		app.Metrics().RequestDuration.WithLabelValues(
 			serviceName,
 			info.FullMethod,
+		).Observe(duration)
+
+		app.Metrics().ServiceTotal.WithLabelValues(
+			serviceName,
+			"grpc_request",
+			statusStr,
+		).Inc()
+
+		app.Metrics().ServiceDuration.WithLabelValues(
+			serviceName,
+			"grpc_request",
 		).Observe(duration)
 
 		return resp, err

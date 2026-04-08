@@ -2,17 +2,22 @@ package logger
 
 import "context"
 
-// TransactionLog represents business transaction monitoring log.
+// TransactionLog represents the platform-standard monitoring contract
+// for transaction-oriented services.
 //
 // Purpose:
-// - Business operation monitoring
+// - Transaction flow monitoring
 // - Grafana dashboard
 // - Success rate tracking
 // - Latency tracking
 // - Alerting by error_code
 //
-// Top-level fields are considered stable monitoring contract.
-// Additional business-specific fields must go into Metadata.
+// Top-level fields are considered a stable monitoring contract.
+// Additional service-specific details must go into Metadata.
+//
+// UserID may be empty for system-to-system flows where no end-user is present.
+// For normal technical service flow, use ServiceLog instead.
+// For database operational/query logging, use DBLog instead.
 //
 // ⚠ DO NOT log sensitive information such as:
 // - password
@@ -40,13 +45,13 @@ import "context"
 //	    },
 //	}
 type TransactionLog struct {
-	Operation     string                 // e.g. "payment_process", "order_submit"
-	TransactionID string                 // business transaction ID
-	UserID        string                 // user identifier
-	Status        string                 // "success" or "failed"
+	Operation     string                 // stable transaction flow name, e.g. "payment_process"
+	TransactionID string                 // business transaction identifier for correlation
+	UserID        string                 // actor or end-user identifier; may be empty for system flows
+	Status        string                 // stable status, e.g. "success", "failed", "pending"
 	DurationMs    int64                  // execution duration in milliseconds
-	ErrorCode     string                 // optional classification (e.g. "PAYMENT_TIMEOUT")
-	Metadata      map[string]interface{} // additional structured business info
+	ErrorCode     string                 // optional stable classification for monitoring
+	Metadata      map[string]interface{} // additional structured service-specific attributes
 }
 
 func (z *zapLogger) LogTransaction(ctx context.Context, tx TransactionLog) {

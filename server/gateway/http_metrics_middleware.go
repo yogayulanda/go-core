@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/yogayulanda/go-core/app"
+	"github.com/yogayulanda/go-core/logger"
 )
 
 var uuidSegmentPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
@@ -16,6 +17,7 @@ var uuidSegmentPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5
 func withHTTPMetrics(application *app.App, next http.Handler) http.Handler {
 	serviceName := application.Config().App.ServiceName
 	metrics := application.Metrics()
+	log := application.Logger()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip self-observation to avoid noisy scrape feedback loops.
@@ -31,6 +33,11 @@ func withHTTPMetrics(application *app.App, next http.Handler) http.Handler {
 		route := normalizeHTTPRoute(r.URL.Path)
 		status := strconv.Itoa(ww.statusCode)
 		duration := time.Since(start).Seconds()
+		serviceStatus := "success"
+		if ww.statusCode >= http.StatusBadRequest {
+			serviceStatus = "failed"
+		}
+		operation := "http_request"
 
 		metrics.HTTPRequestTotal.WithLabelValues(
 			serviceName,
@@ -44,7 +51,40 @@ func withHTTPMetrics(application *app.App, next http.Handler) http.Handler {
 			r.Method,
 			route,
 		).Observe(duration)
+
+		metrics.ServiceTotal.WithLabelValues(
+			serviceName,
+			operation,
+			serviceStatus,
+		).Inc()
+
+		metrics.ServiceDuration.WithLabelValues(
+			serviceName,
+			operation,
+		).Observe(duration)
+
+		log.LogService(r.Context(), logger.ServiceLog{
+			Operation:  operation,
+			Status:     serviceStatus,
+			DurationMs: time.Since(start).Milliseconds(),
+			ErrorCode:  httpErrorCode(ww.statusCode),
+			Metadata: map[string]interface{}{
+				"http_method": r.Method,
+				"route":       route,
+				"status_code": ww.statusCode,
+			},
+		})
 	})
+}
+
+func httpErrorCode(statusCode int) string {
+	if statusCode < http.StatusBadRequest {
+		return ""
+	}
+	if statusCode >= http.StatusInternalServerError {
+		return "http_server_error"
+	}
+	return "http_client_error"
 }
 
 type statusCapturingResponseWriter struct {

@@ -16,9 +16,20 @@ type DB struct {
 
 // New initializes database connection pool.
 func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
+	startedAt := time.Now()
 
 	db, err := sql.Open(cfg.Driver, cfg.DSN)
 	if err != nil {
+		log.LogDB(context.Background(), logger.DBLog{
+			Operation:  "connect",
+			DBName:     cfg.Name,
+			Status:     "failed",
+			DurationMs: time.Since(startedAt).Milliseconds(),
+			ErrorCode:  "open_failed",
+			Metadata: map[string]interface{}{
+				"driver": cfg.Driver,
+			},
+		})
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
@@ -33,16 +44,32 @@ func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {
+		log.LogDB(ctx, logger.DBLog{
+			Operation:  "connect",
+			DBName:     cfg.Name,
+			Status:     "failed",
+			DurationMs: time.Since(startedAt).Milliseconds(),
+			ErrorCode:  "ping_failed",
+			Metadata: map[string]interface{}{
+				"driver": cfg.Driver,
+			},
+		})
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	log.Info(ctx, "database connected",
-		logger.Field{Key: "driver", Value: cfg.Driver},
-		logger.Field{Key: "max_open_conns", Value: cfg.MaxOpenConns},
-		logger.Field{Key: "max_idle_conns", Value: cfg.MaxIdleConns},
-		logger.Field{Key: "conn_max_idle_time", Value: cfg.ConnMaxIdleTime.String()},
-		logger.Field{Key: "conn_max_lifetime", Value: cfg.ConnMaxLifetime.String()},
-	)
+	log.LogDB(ctx, logger.DBLog{
+		Operation:  "connect",
+		DBName:     cfg.Name,
+		Status:     "success",
+		DurationMs: time.Since(startedAt).Milliseconds(),
+		Metadata: map[string]interface{}{
+			"driver":             cfg.Driver,
+			"max_open_conns":     cfg.MaxOpenConns,
+			"max_idle_conns":     cfg.MaxIdleConns,
+			"conn_max_idle_time": cfg.ConnMaxIdleTime.String(),
+			"conn_max_lifetime":  cfg.ConnMaxLifetime.String(),
+		},
+	})
 
 	return &DB{DB: db}, nil
 }

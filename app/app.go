@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/yogayulanda/go-core/cache"
 	"github.com/yogayulanda/go-core/config"
@@ -37,6 +38,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	startedAt := time.Now()
 
 	// 1. Logger
 	log, err := logger.New(cfg.App.ServiceName, cfg.App.LogLevel)
@@ -109,7 +111,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		})
 	}
 
-	return &App{
+	application := &App{
 		cfg:            cfg,
 		logger:         log,
 		metrics:        metrics,
@@ -117,7 +119,23 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		dbs:            dbs,
 		redisCache:     redisClient,
 		memcachedCache: memcachedClient,
-	}, nil
+	}
+
+	log.LogService(ctx, logger.ServiceLog{
+		Operation:  "app_init",
+		Status:     "success",
+		DurationMs: time.Since(startedAt).Milliseconds(),
+		Metadata: map[string]interface{}{
+			"database_count":     len(dbs),
+			"redis_enabled":      cfg.Redis.Enabled,
+			"memcached_enabled":  cfg.Memcached.Enabled,
+			"kafka_enabled":      cfg.Kafka.Enabled,
+			"observability_otlp": cfg.Observability.OTLPEndpoint != "",
+			"shutdown_timeout_s": cfg.App.ShutdownTimeout.Seconds(),
+		},
+	})
+
+	return application, nil
 }
 
 //
@@ -226,11 +244,17 @@ func (a *App) NewKafkaConsumer(
 // Start blocks until context cancelled.
 // Lifecycle shutdown will close DB, Redis, Publisher, Consumer, etc.
 func (a *App) Start(ctx context.Context) error {
-	a.logger.Info(ctx, "application starting")
+	a.logger.LogService(ctx, logger.ServiceLog{
+		Operation: "app_runtime",
+		Status:    "started",
+	})
 
 	<-ctx.Done()
 
-	a.logger.Info(ctx, "shutdown signal received")
+	a.logger.LogService(ctx, logger.ServiceLog{
+		Operation: "app_runtime",
+		Status:    "shutdown_requested",
+	})
 
 	shutdownCtx, cancel := context.WithTimeout(
 		context.Background(),
@@ -238,5 +262,21 @@ func (a *App) Start(ctx context.Context) error {
 	)
 	defer cancel()
 
-	return a.lifecycle.Shutdown(shutdownCtx)
+	if err := a.lifecycle.Shutdown(shutdownCtx); err != nil {
+		a.logger.LogService(ctx, logger.ServiceLog{
+			Operation: "app_runtime",
+			Status:    "failed",
+			ErrorCode: "shutdown_failed",
+			Metadata: map[string]interface{}{
+				"error": err.Error(),
+			},
+		})
+		return err
+	}
+
+	a.logger.LogService(ctx, logger.ServiceLog{
+		Operation: "app_runtime",
+		Status:    "success",
+	})
+	return nil
 }

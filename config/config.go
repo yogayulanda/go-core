@@ -2,6 +2,28 @@ package config
 
 import "time"
 
+type ValidationIssue struct {
+	Section string
+	Field   string
+	Message string
+}
+
+type ValidationErrors struct {
+	Issues []ValidationIssue
+}
+
+func (e *ValidationErrors) Error() string {
+	if e == nil || len(e.Issues) == 0 {
+		return ""
+	}
+
+	out := make([]string, 0, len(e.Issues))
+	for _, issue := range e.Issues {
+		out = append(out, issue.Message)
+	}
+	return joinValidationMessages(out)
+}
+
 type Config struct {
 	App           AppConfig
 	Databases     map[string]DBConfig

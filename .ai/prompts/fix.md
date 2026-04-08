@@ -9,3 +9,4 @@ Check:
 - framework boundary mistakes
 - docs/tests mismatch
 - hidden runtime side effects
+- accidental breakage of approved platform-standard contracts

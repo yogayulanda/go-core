@@ -8,6 +8,7 @@
 ## Quality Gate
 
 - [ ] `make quality-gate` PASS
+- [ ] `docs/CHANGE_CHECKLIST.md` reviewed
 - Notes:
 
 ## Smoke Gate (staging)

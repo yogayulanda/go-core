@@ -16,6 +16,10 @@ type Metrics struct {
 	RequestDuration     *prometheus.HistogramVec
 	HTTPRequestTotal    *prometheus.CounterVec
 	HTTPRequestDuration *prometheus.HistogramVec
+	ServiceTotal        *prometheus.CounterVec
+	ServiceDuration     *prometheus.HistogramVec
+	DBTotal             *prometheus.CounterVec
+	DBDuration          *prometheus.HistogramVec
 	TransactionTotal    *prometheus.CounterVec
 }
 
@@ -57,6 +61,36 @@ func NewMetrics() *Metrics {
 					Buckets: prometheus.DefBuckets,
 				},
 				[]string{"service", "method", "route"},
+			),
+			ServiceTotal: registerOrReuseCounterVec(
+				prometheus.CounterOpts{
+					Name: "app_service_operation_total",
+					Help: "Total number of structured service operations.",
+				},
+				[]string{"service", "operation", "status"},
+			),
+			ServiceDuration: registerOrReuseHistogramVec(
+				prometheus.HistogramOpts{
+					Name:    "app_service_operation_duration_seconds",
+					Help:    "Structured service operation duration in seconds.",
+					Buckets: prometheus.DefBuckets,
+				},
+				[]string{"service", "operation"},
+			),
+			DBTotal: registerOrReuseCounterVec(
+				prometheus.CounterOpts{
+					Name: "app_db_operation_total",
+					Help: "Total number of structured database operations.",
+				},
+				[]string{"service", "db_name", "operation", "status"},
+			),
+			DBDuration: registerOrReuseHistogramVec(
+				prometheus.HistogramOpts{
+					Name:    "app_db_operation_duration_seconds",
+					Help:    "Structured database operation duration in seconds.",
+					Buckets: prometheus.DefBuckets,
+				},
+				[]string{"service", "db_name", "operation"},
 			),
 			TransactionTotal: registerOrReuseCounterVec(
 				prometheus.CounterOpts{

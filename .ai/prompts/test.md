@@ -7,3 +7,4 @@ Generate focused tests for:
 - failure handling
 - exported behavior that downstream services depend on
 - framework-safe defaults and boundaries
+- approved platform-standard contracts when touched

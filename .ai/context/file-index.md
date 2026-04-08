@@ -2,11 +2,15 @@ Repository Index
 
 - `app/` application container and lifecycle
 - `config/` env loader and validation
+- `config/validate.go` compact validation plus structured issue extraction
 - `database/` SQL connection helpers
 - `dbtx/` transaction manager and context propagation
 - `migration/` goose integration and migration locks
 - `server/` startup, gRPC, gateway
 - `logger/` structured logging, redaction, event helpers
+- `logger/service.go` structured service-flow logging contract
+- `logger/db.go` structured database logging contract
+- `logger/transaction.go` platform-standard transaction monitoring contract
 - `cache/` redis and memcached adapters
 - `messaging/` kafka abstractions
 - `messaging/outbox/` outbox model, repository, worker

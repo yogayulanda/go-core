@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 
 	"github.com/yogayulanda/go-core/app"
+	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/security"
 )
 
@@ -97,10 +98,12 @@ func New(application *app.App) (*Server, error) {
 	}
 
 	application.Lifecycle().Register(func(ctx context.Context) error {
-		log.Info(ctx, "shutting down gRPC server")
+		log.LogService(ctx, appLog("grpc_server", "shutdown_requested", 0, "", nil))
 		err := gracefulStopWithTimeout(ctx, server)
 		if err != nil {
-			log.Warn(ctx, "gRPC graceful stop timed out; forcing stop")
+			log.LogService(ctx, appLog("grpc_server", "failed", 0, "graceful_stop_timeout", map[string]interface{}{
+				"error": err.Error(),
+			}))
 		}
 		return err
 	})
@@ -116,8 +119,20 @@ func (s *Server) Register(registerFunc func(*grpc.Server)) {
 // Start runs the gRPC server.
 func (s *Server) Start() error {
 	log := s.app.Logger()
-	log.Info(context.Background(), "gRPC server starting")
+	log.LogService(context.Background(), appLog("grpc_server", "started", 0, "", map[string]interface{}{
+		"address": s.lis.Addr().String(),
+	}))
 	return s.server.Serve(s.lis)
+}
+
+func appLog(operation string, status string, durationMs int64, errorCode string, metadata map[string]interface{}) logger.ServiceLog {
+	return logger.ServiceLog{
+		Operation:  operation,
+		Status:     status,
+		DurationMs: durationMs,
+		ErrorCode:  errorCode,
+		Metadata:   metadata,
+	}
 }
 
 type grpcStopper interface {

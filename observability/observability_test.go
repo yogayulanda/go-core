@@ -41,6 +41,12 @@ func TestNewMetrics_Singleton(t *testing.T) {
 	if a != b {
 		t.Fatalf("metrics must be singleton")
 	}
+	if a.ServiceTotal == nil || a.ServiceDuration == nil {
+		t.Fatalf("service metrics must not be nil")
+	}
+	if a.DBTotal == nil || a.DBDuration == nil {
+		t.Fatalf("db metrics must not be nil")
+	}
 }
 
 func TestMetricsHandler(t *testing.T) {

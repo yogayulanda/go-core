@@ -1,3 +1,5 @@
+Status: superseded
+
 Task: improve config and database defaults
 
 Goal:

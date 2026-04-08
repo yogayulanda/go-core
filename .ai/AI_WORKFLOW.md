@@ -48,6 +48,7 @@ AI Model
 - infra connectors and contracts
 - migration helper behavior
 - technical error contract and mapping
+- selected platform-standard technical contracts intentionally shared across services
 
 `go-core` does not own:
 
@@ -74,4 +75,5 @@ AI Model
 - keep defaults generic
 - keep service-specific semantics out of framework code and docs
 - keep generic utilities out of `go-core`
+- allow explicit platform-standard observability contracts when intentionally standardized
 - target Go `1.24`

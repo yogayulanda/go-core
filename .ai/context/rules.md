@@ -23,3 +23,5 @@ sanitize external-facing errors and preserve internals in logs
 do not turn `go-core` into a shared utils repository
 
 prefer repository-aware examples and docs over product-specific examples
+
+approved platform-standard technical contracts are allowed when clearly scoped and documented

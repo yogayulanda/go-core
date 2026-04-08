@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -17,4 +18,14 @@ func TestResolveLogLocation_InvalidFallbackUTC(t *testing.T) {
 	if loc.String() != time.UTC.String() {
 		t.Fatalf("expected UTC fallback, got %s", loc.String())
 	}
+}
+
+func TestLoggerNew_ImplementsExpandedInterface(t *testing.T) {
+	log, err := New("test-service", "info")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	log.LogService(context.Background(), ServiceLog{Operation: "boot", Status: "success"})
+	log.LogDB(context.Background(), DBLog{Operation: "connect", DBName: "primary", Status: "success"})
 }

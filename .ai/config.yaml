@@ -2,6 +2,9 @@ version: v1
 
 context:
   - .ai/go-core.md
+  - .ai/context/contracts.md
+  - .ai/context/roadmap.md
+  - .ai/context/backlog.md
   - .ai/context/project.md
   - .ai/context/architecture.md
   - .ai/context/rules.md

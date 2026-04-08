@@ -1,3 +1,5 @@
+Status: pending
+
 Task Context
 
 Task:
@@ -39,6 +41,7 @@ Constraints:
 
 keep go-core domain-agnostic
 keep it foundation-oriented, not utility-oriented
+allow approved platform-standard technical contracts when clearly scoped
 prefer safe evolution; bounded refactor is allowed when it improves the framework
 update tests and docs with code changes
 

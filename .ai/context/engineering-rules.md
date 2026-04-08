@@ -1,11 +1,13 @@
 Engineering Rules
 
 Always keep `go-core` domain-agnostic.
+Domain-agnostic does not forbid approved platform-standard technical contracts.
 
 Prefer additive changes over breaking changes.
 While adoption is still limited, coherent refactors are acceptable if they improve the foundation shape.
 
 Use generic naming in config, docs, and examples.
+When a platform-standard contract is intentional, document its audience and scope explicitly.
 
 Do not hardcode service-specific database aliases such as `transaction`.
 
@@ -37,3 +39,4 @@ When changing foundation boundaries:
 
 - ask whether the change belongs in a service instead
 - ask whether the change is actually a generic utility better suited for `utils-shared`
+- ask whether the change is a justified platform-standard technical contract

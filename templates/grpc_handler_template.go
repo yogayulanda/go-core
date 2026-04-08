@@ -6,6 +6,8 @@ import (
 	coreerrors "github.com/yogayulanda/go-core/errors"
 )
 
+// GRPCHandlerTemplate represents the transport layer in the golden path:
+// validate request shape, map transport input/output, and convert to transport errors.
 type ExecuteRequest struct {
 	SubjectId string
 	Amount    int64

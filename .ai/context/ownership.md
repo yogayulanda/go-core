@@ -27,4 +27,8 @@ Code Ownership Map
 - product-specific field contracts
 - generic utilities better housed in `utils-shared`
 
+Allowed exception:
+
+- selected platform-standard technical contracts intentionally shared across services, such as transaction observability
+
 When a change is better implemented in a consuming service, keep it out of this repo.

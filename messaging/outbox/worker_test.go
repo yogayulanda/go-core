@@ -122,6 +122,8 @@ func (stubLogger) Info(ctx context.Context, msg string, fields ...logger.Field) 
 func (stubLogger) Error(ctx context.Context, msg string, fields ...logger.Field) {}
 func (stubLogger) Debug(ctx context.Context, msg string, fields ...logger.Field) {}
 func (stubLogger) Warn(ctx context.Context, msg string, fields ...logger.Field)  {}
+func (stubLogger) LogService(ctx context.Context, s logger.ServiceLog)          {}
+func (stubLogger) LogDB(ctx context.Context, d logger.DBLog)                    {}
 func (stubLogger) LogEvent(ctx context.Context, e logger.EventLog)               {}
 func (stubLogger) LogTransaction(ctx context.Context, tx logger.TransactionLog)  {}
 func (stubLogger) WithComponent(component string) logger.Logger                  { return stubLogger{} }

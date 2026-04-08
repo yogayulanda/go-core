@@ -184,14 +184,14 @@ func TestLogStartupReadiness_AllReady(t *testing.T) {
 		false,
 	)
 
-	if !log.containsInfo("gRPC server ready") {
-		t.Fatalf("expected info log: gRPC server ready")
+	if !log.containsService("grpc_readiness", "success") {
+		t.Fatalf("expected service log: grpc_readiness success")
 	}
-	if !log.containsInfo("HTTP gateway ready") {
-		t.Fatalf("expected info log: HTTP gateway ready")
+	if !log.containsService("http_gateway_readiness", "success") {
+		t.Fatalf("expected service log: http_gateway_readiness success")
 	}
-	if !log.containsInfo("service ready") {
-		t.Fatalf("expected info log: service ready")
+	if !log.containsService("service_readiness", "success") {
+		t.Fatalf("expected service log: service_readiness success")
 	}
 	if log.countWarn() != 0 {
 		t.Fatalf("expected no warn logs, got %d", log.countWarn())
@@ -212,14 +212,14 @@ func TestLogStartupReadiness_Timeout(t *testing.T) {
 		false,
 	)
 
-	if !log.containsWarn("gRPC readiness check timeout") {
-		t.Fatalf("expected warn log: gRPC readiness check timeout")
+	if !log.containsService("grpc_readiness", "failed") {
+		t.Fatalf("expected service log: grpc_readiness failed")
 	}
-	if !log.containsWarn("HTTP gateway readiness check timeout") {
-		t.Fatalf("expected warn log: HTTP gateway readiness check timeout")
+	if !log.containsService("http_gateway_readiness", "failed") {
+		t.Fatalf("expected service log: http_gateway_readiness failed")
 	}
-	if log.containsInfo("service ready") {
-		t.Fatalf("did not expect service ready log on timeout")
+	if log.containsService("service_readiness", "success") {
+		t.Fatalf("did not expect service_readiness success log on timeout")
 	}
 }
 
@@ -281,9 +281,10 @@ func toString(v interface{}) string {
 }
 
 type fakeLogger struct {
-	mu       sync.Mutex
-	infoLogs []string
-	warnLogs []string
+	mu          sync.Mutex
+	infoLogs    []string
+	warnLogs    []string
+	serviceLogs []logger.ServiceLog
 }
 
 func (f *fakeLogger) Info(ctx context.Context, msg string, fields ...logger.Field) {
@@ -300,6 +301,14 @@ func (f *fakeLogger) Warn(ctx context.Context, msg string, fields ...logger.Fiel
 	defer f.mu.Unlock()
 	f.warnLogs = append(f.warnLogs, msg)
 }
+
+func (f *fakeLogger) LogService(ctx context.Context, s logger.ServiceLog) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.serviceLogs = append(f.serviceLogs, s)
+}
+
+func (f *fakeLogger) LogDB(ctx context.Context, d logger.DBLog) {}
 
 func (f *fakeLogger) LogEvent(ctx context.Context, e logger.EventLog) {}
 
@@ -333,4 +342,15 @@ func (f *fakeLogger) countWarn() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.warnLogs)
+}
+
+func (f *fakeLogger) containsService(operation string, status string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, got := range f.serviceLogs {
+		if got.Operation == operation && got.Status == status {
+			return true
+		}
+	}
+	return false
 }

@@ -2,6 +2,7 @@ Important Symbols
 
 - `config.Load`
 - `(*config.Config).Validate`
+- `(*config.Config).ValidateIssues`
 - `config.NormalizeDBAlias`
 - `database.New`
 - `app.New`
@@ -9,6 +10,12 @@ Important Symbols
 - `(*app.App).SQLByName`
 - `dbtx.WithTx`
 - `dbtx.FromContext`
+- `logger.ServiceLog`
+- `logger.Logger.LogService`
+- `logger.DBLog`
+- `logger.Logger.LogDB`
+- `logger.TransactionLog`
+- `logger.Logger.LogTransaction`
 - `migration.AutoRunUp`
 - `server.Run`
 - `server.DescribeFromProto`

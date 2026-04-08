@@ -8,6 +8,24 @@ Module path:
 
 `github.com/yogayulanda/go-core`
 
+### Foundation boundary
+
+`go-core` has two allowed contract classes:
+
+- Generic foundation contracts:
+  bootstrap/runtime wiring, transport wrappers, config, lifecycle, infra connectors, technical errors, `dbtx`.
+- Platform-standard technical contracts:
+  intentionally standardized technical contracts shared by a class of services.
+
+Current platform-standard example:
+
+- `logger.TransactionLog`
+- `logger.Logger.LogTransaction(...)`
+- `observability` metric `app_transaction_total{service,operation,status}`
+
+These transaction observability contracts are for transaction-oriented services.
+They are not a license to move business rules into `go-core`.
+
 ### What it provides
 
 - App container + graceful shutdown lifecycle (`app`).
@@ -17,6 +35,9 @@ Module path:
   - colored console in `APP_ENV=dev|local|development`.
   - timezone-aware timestamp encoding (default UTC, configurable via `LOG_TIMEZONE`).
   - sensitive-field masking (keep last 2 chars for sensitive values).
+  - `ServiceLog` for normal technical service flow.
+  - `DBLog` for DB operational and query-related logging.
+  - optional `TransactionLog` for transaction-oriented service monitoring.
 - Multi-database initialization (`database`) with named DB map.
 - Optional Redis cache initialization (`cache/redis`).
 - Optional Memcached cache initialization (`cache/memcached`).
@@ -24,23 +45,28 @@ Module path:
   - recovery
   - request-id
   - auth extraction / JWT verification (configurable)
-  - logging
-  - metrics
+  - transport-aligned `ServiceLog` emission for request flow and panic recovery
+  - request metrics + additive service operation metrics
 - gRPC-Gateway wrapper (`server/gateway`) exposing:
   - `GET /health`
   - `GET /ready`
   - `GET /version`
   - `GET /metrics`
+  - transport-aligned request-id propagation, HTTP metrics, service metrics, and `ServiceLog`
 - Startup helper (`server`):
   - `Run(...)` to orchestrate gRPC + gateway + lifecycle with centralized error handling.
   - `DescribeFromProto(...)` to list HTTP/gRPC routes from proto descriptors.
-  - `LogStartupReadiness(...)` to log gRPC and gateway readiness.
+  - `LogStartupReadiness(...)` to emit readiness `ServiceLog` for gRPC, gateway, and combined service readiness.
 - OTEL tracing bootstrap (`observability`).
 - Prometheus metrics (`observability`):
   - `app_http_request_total{service,method,route,status}`
   - `app_http_request_duration_seconds{service,method,route}`
   - `app_request_total{service,method,status}`
   - `app_request_duration_seconds{service,method}`
+  - `app_service_operation_total{service,operation,status}`
+  - `app_service_operation_duration_seconds{service,operation}`
+  - `app_db_operation_total{service,db_name,operation,status}`
+  - `app_db_operation_duration_seconds{service,db_name,operation}`
   - `app_transaction_total{service,operation,status}`
 - Kafka publisher/consumer abstraction (`messaging`).
 - Outbox helpers (`messaging/outbox`) with driver-aware SQL (`mysql|postgres|sqlserver`).
@@ -73,6 +99,12 @@ Module path:
 ### Configuration
 
 All values are loaded from environment variables.
+
+Configuration profiles:
+
+- see `docs/CONFIGURATION_PROFILES.md` for grouped onboarding guidance
+- use `cfg.Validate()` for the compact public error
+- use `cfg.ValidateIssues()` for structured validation issues by section and field
 
 Core:
 
@@ -116,6 +148,12 @@ Alias notes:
 - aliases may contain underscores, for example `transaction_history`
 - env lookup uses uppercase alias token, for example `DB_TRANSACTION_HISTORY_DRIVER`
 - runtime map keys are normalized to lowercase for deterministic lookup
+
+Transaction naming note:
+
+- `dbtx` refers to SQL transaction orchestration.
+- `TransactionLog` refers to transaction-flow monitoring for transaction-oriented services.
+- They solve different concerns and are intentionally separate.
 
 Migration:
 
@@ -266,6 +304,49 @@ Example response:
 If your service does not use database, you can keep `DB_LIST` empty.
 When `MIGRATION_AUTO_RUN=true`, `MIGRATION_DB` and `MIGRATION_DIR` must be set explicitly, and `MIGRATION_DB` must exist in `DB_LIST`.
 
+### Golden path for a new service
+
+Canonical startup flow:
+
+1. `config.Load(...)`
+2. `cfg.Validate()`
+3. optional `migration.AutoRunUp(cfg)`
+4. `app.New(ctx, cfg)`
+5. build gRPC and/or gateway transport
+6. `server.Run(ctx, application, ...)`
+
+Use:
+
+- `errors.AppError` for service error contract
+- `dbtx.WithTx(...)` for SQL transaction orchestration
+- `logger.ServiceLog` for structured service-flow logging
+- `logger.DBLog` for structured DB logging when the service touches a database
+- `TransactionLog` only when the service belongs to the transaction-oriented class
+- Redis, Memcached, Kafka, and migration only when the service explicitly chooses them
+- rely on `server.Run(...)` lifecycle/service logs for startup, shutdown, and component failure orchestration
+- rely on gateway/gRPC transport wrappers for aligned request ID, request metrics, and additive service metrics
+
+### Logging flavors
+
+`go-core` supports three intentional logging flavors:
+
+- `ServiceLog`:
+  standard structured log for normal technical service flow
+- `DBLog`:
+  standard structured log for DB connect/ping/query/timeout/failure reporting
+- `TransactionLog`:
+  platform-standard structured log for transaction-oriented services
+
+Keep using `Info/Error/Debug/Warn` for flexible low-level technical logs and framework internals.
+Keep using `EventLog` for important event/compliance-style logging.
+
+Runtime and transport alignment now means:
+
+- `app.New(...)`, `app.Start(...)`, lifecycle shutdown, and `server.Run(...)` emit structured `ServiceLog` for orchestration milestones.
+- `server.LogStartupReadiness(...)` emits readiness `ServiceLog` instead of ad hoc startup strings.
+- gRPC request flow emits both request metrics and additive service metrics under `grpc_request`.
+- HTTP gateway flow emits both HTTP metrics and additive service metrics under `http_request`.
+
 ### Minimal integration flow in a service
 
 ```go
@@ -273,6 +354,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -292,26 +374,52 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	cfg, _ := coreconfig.Load(coreconfig.WithDotEnv(".env"))
-	_ = cfg.Validate()
-	_ = coremigration.AutoRunUp(cfg)
+	cfg, err := coreconfig.Load(coreconfig.WithDotEnv(".env"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := cfg.Validate(); err != nil {
+		log.Fatal(err)
+	}
+	if err := coremigration.AutoRunUp(cfg); err != nil {
+		log.Fatal(err)
+	}
 
-	core, _ := coreapp.New(ctx, cfg)
-	grpcServer, _ := coregrpc.New(core)
-	gatewayServer, _ := coregateway.New(core, func(ctx context.Context, mux *runtime.ServeMux) error {
+	application, err := coreapp.New(ctx, cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	grpcServer, err := coregrpc.New(application)
+	if err != nil {
+		log.Fatal(err)
+	}
+	gatewayServer, err := coregateway.New(application, func(ctx context.Context, mux *runtime.ServeMux) error {
 		// register grpc-gateway handlers here
 		return nil
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	grpcServer.Register(func(s *grpc.Server) {
 		// register grpc service handlers here
 	})
 
-	go coreserver.LogStartupReadiness(ctx, core.Logger(), cfg.GRPC.Port, cfg.HTTP.Port, 10*time.Second, cfg.HTTP.TLSEnabled)
+	go coreserver.LogStartupReadiness(ctx, application.Logger(), cfg.GRPC.Port, cfg.HTTP.Port, 10*time.Second, cfg.HTTP.TLSEnabled)
 
-	_ = coreserver.Run(ctx, core, grpcServer, gatewayServer)
+	if err := coreserver.Run(ctx, application, grpcServer, gatewayServer); err != nil {
+		log.Fatal(err)
+	}
 }
 ```
+
+More guidance:
+
+- `docs/SERVICE_BOOTSTRAP.md`
+- `docs/TRANSACTION_OBSERVABILITY.md`
+- `docs/FOUNDATION_BOUNDARY.md`
+- `docs/MESSAGING_PATTERN.md`
+- `docs/CONFIGURATION_PROFILES.md`
 
 ### Quality checks
 
@@ -330,6 +438,15 @@ make lint
 # or run all:
 make check
 ```
+
+CI:
+
+- `.github/workflows/ci.yml` runs `go test ./...`, `go vet ./...`, and `golangci-lint run`
+
+Foundation repo change discipline:
+
+- review `docs/CHANGE_CHECKLIST.md`
+- update `MIGRATION.md` whenever public upgrade behavior changes
 
 ### Production sign-off
 

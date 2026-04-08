@@ -3,6 +3,7 @@ Architecture: framework library
 This repository is the runtime foundation for service applications.
 It should provide composition, startup, lifecycle, transport, and infra contracts.
 It should not become a bucket for unrelated shared helpers.
+It may contain selected platform-standard technical contracts when they are intentionally shared.
 
 Core layering:
 

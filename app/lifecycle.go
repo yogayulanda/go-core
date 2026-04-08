@@ -47,7 +47,10 @@ func (l *Lifecycle) Register(hook func(ctx context.Context) error) {
 // Shutdown executes all registered hooks gracefully.
 func (l *Lifecycle) Shutdown(ctx context.Context) error {
 	if l.logger != nil {
-		l.logger.Info(ctx, "starting graceful shutdown")
+		l.logger.LogService(ctx, logger.ServiceLog{
+			Operation: "lifecycle_shutdown",
+			Status:    "started",
+		})
 	}
 
 	// Apply one global timeout budget if caller does not provide deadline.
@@ -91,15 +94,35 @@ func (l *Lifecycle) Shutdown(ctx context.Context) error {
 				lastErr = errors.Join(lastErr, err)
 			}
 			if l.logger != nil {
-				l.logger.Error(ctx, "shutdown hook failed",
-					logger.Field{Key: "error", Value: err.Error()},
-				)
+				l.logger.LogService(ctx, logger.ServiceLog{
+					Operation: "shutdown_hook",
+					Status:    "failed",
+					ErrorCode: "shutdown_hook_failed",
+					Metadata: map[string]interface{}{
+						"error": err.Error(),
+					},
+				})
 			}
 		}
 	}
 
 	if l.logger != nil {
-		l.logger.Info(ctx, "graceful shutdown completed")
+		status := "success"
+		errorCode := ""
+		metadata := map[string]interface{}{
+			"hook_count": len(hooks),
+		}
+		if lastErr != nil {
+			status = "failed"
+			errorCode = "shutdown_failed"
+			metadata["error"] = lastErr.Error()
+		}
+		l.logger.LogService(ctx, logger.ServiceLog{
+			Operation: "lifecycle_shutdown",
+			Status:    status,
+			ErrorCode: errorCode,
+			Metadata:  metadata,
+		})
 	}
 
 	return lastErr

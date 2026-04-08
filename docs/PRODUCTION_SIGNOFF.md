@@ -2,6 +2,10 @@
 
 This document defines release gates before production deploy.
 
+Before running the gates below, review:
+- `docs/CHANGE_CHECKLIST.md`
+- `MIGRATION.md` when public behavior changed
+
 ## 1) Quality Gate (mandatory)
 
 Run:
@@ -16,6 +20,10 @@ Pass criteria:
 - `go vet ./...` passes
 - `golangci-lint run` passes
 - `golangci-lint run -E gosec --tests=false` passes
+
+CI baseline:
+- `.github/workflows/ci.yml` runs `go test ./...`, `go vet ./...`, and `golangci-lint run` on push and pull request
+- local `make quality-gate` remains the stronger release gate because it also includes race testing and `gosec`
 
 ## 2) Smoke Gate (mandatory, staging)
 
