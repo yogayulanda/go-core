@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -22,11 +23,23 @@ var defaultRunner Runner = GooseRunner{}
 var openSQLDBFn = OpenSQLDB
 var ensureGooseVersionTableFn = ensureGooseVersionTable
 var acquireMigrationLockFn = acquireMigrationLock
+var gooseUpFn = goose.Up
+var gooseDownFn = goose.Down
 
 func OpenSQLDB(cfg *config.Config, dbName string) (*sql.DB, config.DBConfig, error) {
+	dbName = config.NormalizeDBAlias(dbName)
 	dbCfg, ok := cfg.Databases[dbName]
 	if !ok {
-		return nil, config.DBConfig{}, fmt.Errorf("database %q not found in DB_LIST", dbName)
+		for name, candidate := range cfg.Databases {
+			if config.NormalizeDBAlias(name) == dbName {
+				dbCfg = candidate
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return nil, config.DBConfig{}, fmt.Errorf("database %q not found in DB_LIST", dbName)
+		}
 	}
 
 	db, err := sql.Open(dbCfg.Driver, dbCfg.DSN)
@@ -48,11 +61,11 @@ func (GooseRunner) Run(db *sql.DB, driver string, dir string, action string) err
 
 	switch strings.ToLower(strings.TrimSpace(action)) {
 	case "up":
-		if err := goose.Up(db, dir); err != nil {
+		if err := gooseUpFn(db, dir); err != nil && !errors.Is(err, goose.ErrNoNextVersion) {
 			return fmt.Errorf("goose up failed: %w", err)
 		}
 	case "down":
-		if err := goose.Down(db, dir); err != nil {
+		if err := gooseDownFn(db, dir); err != nil {
 			return fmt.Errorf("goose down failed: %w", err)
 		}
 	default:
@@ -74,7 +87,7 @@ func AutoRunUpWithRunner(cfg *config.Config, runner Runner) error {
 		return fmt.Errorf("migration runner is nil")
 	}
 
-	dbName := strings.ToLower(strings.TrimSpace(cfg.Migration.DBName))
+	dbName := config.NormalizeDBAlias(cfg.Migration.DBName)
 	db, dbCfg, err := openSQLDBFn(cfg, dbName)
 	if err != nil {
 		return err
@@ -139,6 +152,12 @@ BEGIN
         is_applied BIT NOT NULL,
         tstamp DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
     );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM dbo.goose_db_version)
+BEGIN
+    INSERT INTO dbo.goose_db_version (version_id, is_applied)
+    VALUES (0, 1);
 END;`
 
 	if _, err := db.Exec(query); err != nil {

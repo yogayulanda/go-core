@@ -92,7 +92,7 @@ Core:
 
 Databases:
 
-- `DB_LIST` (optional, comma-separated names, example: `transaction,history`)
+- `DB_LIST` (optional, comma-separated aliases, example: `primary,ledger_history`)
 - Per DB name (`<N>` is uppercase name from `DB_LIST`):
   - `DB_<N>_DRIVER` (required; `mysql|postgres|sqlserver`)
   - `DB_<N>_DSN` (optional override)
@@ -107,13 +107,21 @@ Databases:
     - `DB_<N>_REQUIRED` (default: `true`, fail-fast on startup and affects `/ready`)
     - `DB_<N>_MAX_OPEN_CONNS` (default: `20`)
     - `DB_<N>_MAX_IDLE_CONNS` (default: `10`)
+    - `DB_<N>_CONN_MAX_IDLE_TIME` (default: `2m`)
     - `DB_<N>_CONN_MAX_LIFETIME` (default: `5m`)
+
+Alias notes:
+
+- aliases come from the consuming service, not from `go-core`
+- aliases may contain underscores, for example `transaction_history`
+- env lookup uses uppercase alias token, for example `DB_TRANSACTION_HISTORY_DRIVER`
+- runtime map keys are normalized to lowercase for deterministic lookup
 
 Migration:
 
 - `MIGRATION_AUTO_RUN` (default: `false`)
-- `MIGRATION_DB` (default: `transaction`, must exist in `DB_LIST` when auto-run enabled)
-- `MIGRATION_DIR` (default: `migrations/transaction`)
+- `MIGRATION_DB` (no default; must exist in `DB_LIST` when auto-run enabled)
+- `MIGRATION_DIR` (no default; required when auto-run enabled)
 - `MIGRATION_LOCK_ENABLED` (default: `true`)
 - `MIGRATION_LOCK_KEY` (default: empty; auto-generated as `<SERVICE_NAME>:migration:<MIGRATION_DB>`)
 - `MIGRATION_LOCK_TIMEOUT` (default: `30s`)
@@ -174,14 +182,19 @@ GRPC_PORT=9090
 HTTP_PORT=8080
 
 # Database (example)
-DB_LIST=transaction
-DB_TRANSACTION_DRIVER=sqlserver
-DB_TRANSACTION_HOST=127.0.0.1
-DB_TRANSACTION_PORT=1433
-DB_TRANSACTION_NAME=transaction_history
-DB_TRANSACTION_USER=sa
-DB_TRANSACTION_PASSWORD=********
-DB_TRANSACTION_REQUIRED=true
+DB_LIST=primary
+DB_PRIMARY_DRIVER=sqlserver
+DB_PRIMARY_HOST=127.0.0.1
+DB_PRIMARY_PORT=1433
+DB_PRIMARY_NAME=app_db
+DB_PRIMARY_USER=sa
+DB_PRIMARY_PASSWORD=********
+DB_PRIMARY_REQUIRED=true
+DB_PRIMARY_CONN_MAX_IDLE_TIME=2m
+
+MIGRATION_AUTO_RUN=true
+MIGRATION_DB=primary
+MIGRATION_DIR=migrations/primary
 
 # Internal JWT
 INTERNAL_JWT_ENABLED=true
@@ -242,7 +255,7 @@ Example response:
 {
   "status": "not_ready",
   "checks": {
-    "database.transaction": {"status": "up", "required": true},
+    "database.primary": {"status": "up", "required": true},
     "redis": {"status": "down", "required": true, "message": "health check failed"},
     "memcached": {"status": "skipped", "required": false, "message": "disabled"},
     "kafka": {"status": "skipped", "required": false, "message": "disabled"}
@@ -251,7 +264,7 @@ Example response:
 ```
 
 If your service does not use database, you can keep `DB_LIST` empty.
-When `MIGRATION_AUTO_RUN=true`, `MIGRATION_DB` must exist in `DB_LIST`.
+When `MIGRATION_AUTO_RUN=true`, `MIGRATION_DB` and `MIGRATION_DIR` must be set explicitly, and `MIGRATION_DB` must exist in `DB_LIST`.
 
 ### Minimal integration flow in a service
 

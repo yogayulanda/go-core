@@ -299,14 +299,14 @@ func TestAutoRunUpWithRunner_EmptyLockKey_UseDefaultLockKey(t *testing.T) {
 	cfg := minimalAutoRunConfig()
 	cfg.Migration.LockEnabled = true
 	cfg.Migration.LockKey = ""
-	cfg.Migration.DBName = "transaction"
+	cfg.Migration.DBName = "Transaction_History"
 	cfg.App.ServiceName = "ths"
 
 	err = AutoRunUpWithRunner(cfg, runner)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if gotLockKey != "ths:migration:transaction" {
+	if gotLockKey != "ths:migration:transaction_history" {
 		t.Fatalf("expected default lock key, got: %q", gotLockKey)
 	}
 }
@@ -358,14 +358,14 @@ func minimalAutoRunConfig() *config.Config {
 			ServiceName: "transaction-history-service",
 		},
 		Databases: map[string]config.DBConfig{
-			"transaction": {
+			"transaction_history": {
 				Driver: "mysql",
 			},
 		},
 		Migration: config.MigrationConfig{
 			AutoRun:     true,
-			DBName:      "transaction",
-			Dir:         "migrations/transaction",
+			DBName:      "transaction_history",
+			Dir:         "migrations/history",
 			LockEnabled: true,
 			LockTimeout: 30 * time.Second,
 		},

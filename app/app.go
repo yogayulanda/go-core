@@ -59,7 +59,8 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 
 	// 5. Databases
 	dbs := make(map[string]*database.DB)
-	for name, dbCfg := range cfg.Databases {
+	for rawName, dbCfg := range cfg.Databases {
+		name := config.NormalizeDBAlias(rawName)
 		db, err := newDatabaseFn(dbCfg, log)
 		if err != nil {
 			if dbCfg.Required {
@@ -136,7 +137,7 @@ func (a *App) Metrics() *observability.Metrics {
 }
 
 func (a *App) SQLByName(name string) *database.DB {
-	return a.dbs[name]
+	return a.dbs[config.NormalizeDBAlias(name)]
 }
 
 func (a *App) SQLAll() map[string]*database.DB {

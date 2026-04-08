@@ -22,7 +22,7 @@ func TestNew_RequiredDatabaseFailure_ReturnError(t *testing.T) {
 
 	cfg := baseAppConfig()
 	cfg.Databases = map[string]config.DBConfig{
-		"transaction": {
+		"transaction_history": {
 			Driver:   "mysql",
 			DSN:      "dummy",
 			Required: true,
@@ -54,7 +54,7 @@ func TestNew_OptionalDatabaseFailure_ContinueStartup(t *testing.T) {
 
 	cfg := baseAppConfig()
 	cfg.Databases = map[string]config.DBConfig{
-		"transaction": {
+		"transaction_history": {
 			Driver:   "mysql",
 			DSN:      "dummy",
 			Required: true,
@@ -75,7 +75,7 @@ func TestNew_OptionalDatabaseFailure_ContinueStartup(t *testing.T) {
 	if len(all) != 1 {
 		t.Fatalf("expected 1 available db, got %d", len(all))
 	}
-	if application.SQLByName("transaction") == nil {
+	if application.SQLByName("TRANSACTION_HISTORY") == nil {
 		t.Fatalf("required db must exist")
 	}
 	if application.SQLByName("history") != nil {
@@ -93,7 +93,7 @@ func TestNew_AllOptionalDatabaseFailure_StartupSuccess(t *testing.T) {
 
 	cfg := baseAppConfig()
 	cfg.Databases = map[string]config.DBConfig{
-		"history": {
+		"ledger_history": {
 			Driver:   "sqlserver",
 			DSN:      "dummy",
 			Required: false,

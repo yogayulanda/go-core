@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -48,6 +49,7 @@ func TestDescribeFromProto_HealthService(t *testing.T) {
 func TestWaitForTCP_Ready(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
+		skipIfListenNotPermitted(t, err)
 		t.Fatalf("listen failed: %v", err)
 	}
 	defer lis.Close()
@@ -67,6 +69,7 @@ func TestWaitForHTTPHealth_Ready(t *testing.T) {
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
+		skipIfListenNotPermitted(t, err)
 		t.Fatalf("listen failed: %v", err)
 	}
 	defer lis.Close()
@@ -95,7 +98,7 @@ func TestWaitForHTTPHealth_TLSReady(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	srv := httptest.NewTLSServer(mux)
+	srv := newTLSServerOrSkip(t, mux)
 	defer srv.Close()
 
 	u, err := url.Parse(srv.URL)
@@ -128,6 +131,7 @@ func TestNormalizePath(t *testing.T) {
 func TestWaitForHTTPHealth_Timeout(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
+		skipIfListenNotPermitted(t, err)
 		t.Fatalf("listen failed: %v", err)
 	}
 	port := portFromAddr(t, lis.Addr())
@@ -141,6 +145,7 @@ func TestWaitForHTTPHealth_Timeout(t *testing.T) {
 func TestLogStartupReadiness_AllReady(t *testing.T) {
 	grpcLis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
+		skipIfListenNotPermitted(t, err)
 		t.Fatalf("grpc listen failed: %v", err)
 	}
 	defer grpcLis.Close()
@@ -153,6 +158,7 @@ func TestLogStartupReadiness_AllReady(t *testing.T) {
 
 	httpLis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
+		skipIfListenNotPermitted(t, err)
 		t.Fatalf("http listen failed: %v", err)
 	}
 	defer httpLis.Close()
@@ -221,6 +227,7 @@ func getFreePort(t *testing.T) int {
 	t.Helper()
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
+		skipIfListenNotPermitted(t, err)
 		t.Fatalf("listen failed: %v", err)
 	}
 	port := portFromAddr(t, lis.Addr())
@@ -235,6 +242,42 @@ func portFromAddr(t *testing.T, addr net.Addr) int {
 		t.Fatalf("expected *net.TCPAddr, got %T", addr)
 	}
 	return tcpAddr.Port
+}
+
+func skipIfListenNotPermitted(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		return
+	}
+	if errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "operation not permitted") {
+		t.Skipf("listen not permitted in current environment: %v", err)
+	}
+}
+
+func newTLSServerOrSkip(t *testing.T, handler http.Handler) (srv *httptest.Server) {
+	t.Helper()
+
+	defer func() {
+		if r := recover(); r != nil {
+			if strings.Contains(strings.ToLower(toString(r)), "operation not permitted") {
+				t.Skipf("tls test server listen not permitted in current environment: %v", r)
+			}
+			panic(r)
+		}
+	}()
+
+	return httptest.NewTLSServer(handler)
+}
+
+func toString(v interface{}) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case error:
+		return x.Error()
+	default:
+		return ""
+	}
 }
 
 type fakeLogger struct {

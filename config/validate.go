@@ -26,15 +26,19 @@ func (c *Config) Validate() error {
 		if db.MaxIdleConns < 0 {
 			errs = append(errs, "DB_"+strings.ToUpper(name)+"_MAX_IDLE_CONNS must be >= 0")
 		}
+		if db.ConnMaxIdleTime < 0 {
+			errs = append(errs, "DB_"+strings.ToUpper(name)+"_CONN_MAX_IDLE_TIME must be >= 0")
+		}
 		if db.Port < 0 {
 			errs = append(errs, "DB_"+strings.ToUpper(name)+"_PORT must be >= 0")
 		}
 	}
 
 	if c.Migration.AutoRun {
-		if strings.TrimSpace(c.Migration.DBName) == "" {
+		migrationDB := NormalizeDBAlias(c.Migration.DBName)
+		if migrationDB == "" {
 			errs = append(errs, "MIGRATION_DB is required when MIGRATION_AUTO_RUN=true")
-		} else if _, ok := c.Databases[strings.ToLower(strings.TrimSpace(c.Migration.DBName))]; !ok {
+		} else if !hasDatabaseAlias(c.Databases, migrationDB) {
 			errs = append(errs, "MIGRATION_DB must exist in DB_LIST when MIGRATION_AUTO_RUN=true")
 		}
 

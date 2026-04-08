@@ -34,6 +34,7 @@ type DBConfig struct {
 	Required        bool
 	MaxOpenConns    int
 	MaxIdleConns    int
+	ConnMaxIdleTime time.Duration
 	ConnMaxLifetime time.Duration
 }
 

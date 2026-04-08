@@ -26,9 +26,7 @@ func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
 	db.SetMaxOpenConns(cfg.MaxOpenConns)
 	db.SetMaxIdleConns(cfg.MaxIdleConns)
 	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
-
-	// NEW: important for modern Go
-	db.SetConnMaxIdleTime(2 * time.Minute)
+	db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 
 	// Fail fast check
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -42,6 +40,7 @@ func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
 		logger.Field{Key: "driver", Value: cfg.Driver},
 		logger.Field{Key: "max_open_conns", Value: cfg.MaxOpenConns},
 		logger.Field{Key: "max_idle_conns", Value: cfg.MaxIdleConns},
+		logger.Field{Key: "conn_max_idle_time", Value: cfg.ConnMaxIdleTime.String()},
 		logger.Field{Key: "conn_max_lifetime", Value: cfg.ConnMaxLifetime.String()},
 	)
 

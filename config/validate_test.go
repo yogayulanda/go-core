@@ -131,3 +131,75 @@ func TestValidate_OTLPInsecureWithCACertConflict(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestValidate_MigrationAutoRunRequiresExplicitDBAndDir(t *testing.T) {
+	cfg := &Config{
+		App: AppConfig{
+			ServiceName: "svc",
+		},
+		Migration: MigrationConfig{
+			AutoRun: true,
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatalf("expected validation error")
+	}
+	if !strings.Contains(err.Error(), "MIGRATION_DB is required") || !strings.Contains(err.Error(), "MIGRATION_DIR is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_MigrationDBMustExistWithNormalizedAlias(t *testing.T) {
+	cfg := &Config{
+		App: AppConfig{
+			ServiceName: "svc",
+		},
+		Databases: map[string]DBConfig{
+			"transaction_history": {
+				Driver:          "sqlserver",
+				DSN:             "sqlserver://example",
+				MaxOpenConns:    10,
+				MaxIdleConns:    5,
+				ConnMaxIdleTime: time.Minute,
+				ConnMaxLifetime: time.Minute,
+			},
+		},
+		Migration: MigrationConfig{
+			AutoRun: true,
+			DBName:  "Transaction_History",
+			Dir:     "migrations/history",
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_DBConnMaxIdleTimeNegative(t *testing.T) {
+	cfg := &Config{
+		App: AppConfig{
+			ServiceName: "svc",
+		},
+		Databases: map[string]DBConfig{
+			"primary": {
+				Driver:          "sqlserver",
+				DSN:             "sqlserver://example",
+				MaxOpenConns:    10,
+				MaxIdleConns:    5,
+				ConnMaxIdleTime: -1 * time.Second,
+				ConnMaxLifetime: time.Minute,
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatalf("expected validation error")
+	}
+	if !strings.Contains(err.Error(), "DB_PRIMARY_CONN_MAX_IDLE_TIME must be >= 0") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

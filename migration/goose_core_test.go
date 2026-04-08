@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pressly/goose/v3"
 	"github.com/yogayulanda/go-core/config"
 )
 
@@ -78,6 +79,34 @@ func TestOpenSQLDB_ValidSQLMockConfig_ReturnDB(t *testing.T) {
 	}
 }
 
+func TestOpenSQLDB_NormalizedAliasLookup_ReturnDB(t *testing.T) {
+	const dsn = "go_core_migration_sqlmock_normalized"
+
+	mockDB, _, err := sqlmock.NewWithDSN(dsn)
+	if err != nil {
+		t.Fatalf("create sqlmock with dsn failed: %v", err)
+	}
+	defer mockDB.Close()
+
+	cfg := &config.Config{
+		Databases: map[string]config.DBConfig{
+			"transaction_history": {
+				Driver: "sqlmock",
+				DSN:    dsn,
+			},
+		},
+	}
+
+	db, _, err := OpenSQLDB(cfg, "Transaction_History")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if db == nil {
+		t.Fatalf("expected db")
+	}
+	_ = db.Close()
+}
+
 func TestGooseDialect_Driver_ReturnExpectedDialect(t *testing.T) {
 	if got := GooseDialect("sqlserver"); got != "mssql" {
 		t.Fatalf("expected mssql, got %q", got)
@@ -126,6 +155,26 @@ func TestGooseRunnerRun_InvalidMigrationDirUp_ReturnError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "goose up failed") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGooseRunnerRun_NoNextVersion_IsIgnored(t *testing.T) {
+	origGooseUp := gooseUpFn
+	defer func() { gooseUpFn = origGooseUp }()
+
+	gooseUpFn = func(_ *sql.DB, _ string, _ ...goose.OptionsFunc) error {
+		return goose.ErrNoNextVersion
+	}
+
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("create sqlmock failed: %v", err)
+	}
+	defer db.Close()
+
+	err = GooseRunner{}.Run(db, "mysql", ".", "up")
+	if err != nil {
+		t.Fatalf("expected nil error when no next version exists, got: %v", err)
 	}
 }
 
@@ -208,6 +257,24 @@ func TestEnsureGooseVersionTable_SQLServer_CreateIfMissing(t *testing.T) {
 
 	mock.ExpectExec(`OBJECT_ID\('dbo\.goose_db_version', 'U'\)`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	if err := ensureGooseVersionTable("sqlserver", db); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet sql expectations: %v", err)
+	}
+}
+
+func TestEnsureGooseVersionTable_SQLServer_SeedsInitialVersion(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("create sqlmock failed: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectExec(`INSERT INTO dbo\.goose_db_version`).
+		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	if err := ensureGooseVersionTable("sqlserver", db); err != nil {
 		t.Fatalf("unexpected error: %v", err)

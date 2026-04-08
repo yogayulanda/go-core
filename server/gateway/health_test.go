@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 func TestEvaluateReadiness_DBRequiredFailed(t *testing.T) {
 	cfg := &config.Config{
 		Databases: map[string]config.DBConfig{
-			"transaction": {Required: true},
+			"transaction_history": {Required: true},
 		},
 	}
 
@@ -21,7 +22,7 @@ func TestEvaluateReadiness_DBRequiredFailed(t *testing.T) {
 		context.Background(),
 		cfg,
 		map[string]sqlPinger{
-			"transaction": fakeSQLPinger{err: errors.New("down")},
+			"transaction_history": fakeSQLPinger{err: errors.New("down")},
 		},
 		nil,
 		nil,
@@ -33,9 +34,9 @@ func TestEvaluateReadiness_DBRequiredFailed(t *testing.T) {
 	if report.Status != readinessStatusNotReady {
 		t.Fatalf("expected status %q, got %q", readinessStatusNotReady, report.Status)
 	}
-	check, exists := report.Checks["database.transaction"]
+	check, exists := report.Checks["database.transaction_history"]
 	if !exists {
-		t.Fatalf("expected database.transaction check")
+		t.Fatalf("expected database.transaction_history check")
 	}
 	if check.Status != checkStatusDown || !check.Required {
 		t.Fatalf("unexpected database check: %+v", check)
@@ -148,7 +149,7 @@ func TestEvaluateReadiness_KafkaFail(t *testing.T) {
 func TestEvaluateReadiness_AllReady(t *testing.T) {
 	cfg := &config.Config{
 		Databases: map[string]config.DBConfig{
-			"transaction": {Required: true},
+			"transaction_history": {Required: true},
 		},
 		Redis:     config.RedisConfig{Enabled: true},
 		Memcached: config.MemcachedConfig{Enabled: true},
@@ -162,7 +163,7 @@ func TestEvaluateReadiness_AllReady(t *testing.T) {
 		context.Background(),
 		cfg,
 		map[string]sqlPinger{
-			"transaction": fakeSQLPinger{},
+			"transaction_history": fakeSQLPinger{},
 		},
 		fakeCache{},
 		fakeCache{},
@@ -174,7 +175,7 @@ func TestEvaluateReadiness_AllReady(t *testing.T) {
 	if report.Status != readinessStatusReady {
 		t.Fatalf("expected report status %q, got %q", readinessStatusReady, report.Status)
 	}
-	requiredChecks := []string{"database.transaction", "redis", "memcached", "kafka"}
+	requiredChecks := []string{"database.transaction_history", "redis", "memcached", "kafka"}
 	for _, key := range requiredChecks {
 		check, exists := report.Checks[key]
 		if !exists {
@@ -189,6 +190,9 @@ func TestEvaluateReadiness_AllReady(t *testing.T) {
 func TestIsKafkaReady(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
+		if errors.Is(err, net.ErrClosed) || isListenNotPermitted(err) {
+			t.Skipf("listen not permitted in current environment: %v", err)
+		}
 		t.Fatalf("listen failed: %v", err)
 	}
 	defer ln.Close()
@@ -224,3 +228,10 @@ func (f fakeCache) Set(context.Context, string, []byte, time.Duration) error {
 func (f fakeCache) Delete(context.Context, string) error { return nil }
 func (f fakeCache) Health(context.Context) error         { return f.healthErr }
 func (f fakeCache) Close() error                         { return nil }
+
+func isListenNotPermitted(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "operation not permitted")
+}

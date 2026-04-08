@@ -37,8 +37,8 @@ func Load(opts ...Option) (*Config, error) {
 		Databases: dbs,
 		Migration: MigrationConfig{
 			AutoRun:     getBool("MIGRATION_AUTO_RUN", false),
-			DBName:      getString("MIGRATION_DB", "transaction"),
-			Dir:         getString("MIGRATION_DIR", "migrations/transaction"),
+			DBName:      NormalizeDBAlias(getString("MIGRATION_DB", "")),
+			Dir:         strings.TrimSpace(getString("MIGRATION_DIR", "")),
 			LockEnabled: getBool("MIGRATION_LOCK_ENABLED", true),
 			LockKey:     getString("MIGRATION_LOCK_KEY", ""),
 			LockTimeout: getDuration("MIGRATION_LOCK_TIMEOUT", 30*time.Second),
@@ -109,7 +109,7 @@ func loadDatabases() (map[string]DBConfig, error) {
 
 	dbs := make(map[string]DBConfig)
 	for _, conn := range connections {
-		conn = strings.ToLower(strings.TrimSpace(conn))
+		conn = NormalizeDBAlias(conn)
 		if conn == "" {
 			continue
 		}
@@ -149,7 +149,7 @@ func validateComposeFields(name string, cfg DBConfig) error {
 }
 
 func loadDatabaseByConnection(name string) DBConfig {
-	prefix := "DB_" + strings.ToUpper(name) + "_"
+	prefix := DatabaseEnvPrefix(name)
 
 	return DBConfig{
 		Driver:          strings.ToLower(getString(prefix+"DRIVER", "")),
@@ -163,6 +163,7 @@ func loadDatabaseByConnection(name string) DBConfig {
 		Required:        getBool(prefix+"REQUIRED", true),
 		MaxOpenConns:    getInt(prefix+"MAX_OPEN_CONNS", 20),
 		MaxIdleConns:    getInt(prefix+"MAX_IDLE_CONNS", 10),
+		ConnMaxIdleTime: getDuration(prefix+"CONN_MAX_IDLE_TIME", 2*time.Minute),
 		ConnMaxLifetime: getDuration(prefix+"CONN_MAX_LIFETIME", 5*time.Minute),
 	}
 }
