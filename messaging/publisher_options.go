@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/yogayulanda/go-core/logger"
+	"github.com/yogayulanda/go-core/observability"
 )
 
 type publisherConfig struct {
@@ -13,7 +14,9 @@ type publisherConfig struct {
 
 	dlqEnabled bool
 
-	log logger.Logger
+	log         logger.Logger
+	metrics     *observability.Metrics
+	serviceName string
 
 	successLogging bool
 }
@@ -43,6 +46,13 @@ func WithPublisherDLQ() PublisherOption {
 func WithPublisherLogger(log logger.Logger) PublisherOption {
 	return func(c *publisherConfig) {
 		c.log = log
+	}
+}
+
+func WithPublisherMetrics(metrics *observability.Metrics, serviceName string) PublisherOption {
+	return func(c *publisherConfig) {
+		c.metrics = metrics
+		c.serviceName = serviceName
 	}
 }
 

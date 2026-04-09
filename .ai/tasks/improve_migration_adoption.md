@@ -1,4 +1,4 @@
-Status: pending
+Status: done
 
 Task: improve migration adoption workflow
 
@@ -31,3 +31,10 @@ Expected Output:
 - clearer migration adoption guidance
 - stronger tests/docs around lock and autorun behavior
 - upgrade notes that match real public behavior
+
+Implemented Notes:
+
+- migration autorun now has additive logger-aware variants without changing explicit ownership
+- logger-aware autorun emits `migration_autorun` and `migration_lock` service logs
+- tests cover skipped and successful logger-backed autorun behavior
+- migration guidance now documents the logger-aware adoption path and unchanged lock semantics

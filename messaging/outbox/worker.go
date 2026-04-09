@@ -12,19 +12,25 @@ import (
 
 	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/messaging"
+	"github.com/yogayulanda/go-core/observability"
 )
+
+var ErrWorkerAlreadyStarted = errors.New("outbox worker already started")
 
 type Worker struct {
 	db        *sql.DB
 	publisher messaging.Publisher
 	log       logger.Logger
 
-	batchSize int
-	interval  time.Duration
-	stopChan  chan struct{}
-	driver    string
-	stopOnce  sync.Once
-	started   bool
+	batchSize   int
+	interval    time.Duration
+	stopChan    chan struct{}
+	driver      string
+	stopOnce    sync.Once
+	started     bool
+	startMu     sync.Mutex
+	metrics     *observability.Metrics
+	serviceName string
 }
 
 type WorkerOption func(*Worker)
@@ -48,6 +54,13 @@ func WithWorkerInterval(interval time.Duration) WorkerOption {
 		if interval > 0 {
 			w.interval = interval
 		}
+	}
+}
+
+func WithWorkerMetrics(metrics *observability.Metrics, serviceName string) WorkerOption {
+	return func(w *Worker) {
+		w.metrics = metrics
+		w.serviceName = serviceName
 	}
 }
 
@@ -86,13 +99,41 @@ func NewWorkerWithOptions(
 }
 
 func (w *Worker) Start(ctx context.Context) {
-	if w.db == nil || w.publisher == nil || w.log == nil {
+	if err := w.StartChecked(ctx); err != nil {
+		if w != nil && w.log != nil {
+			w.log.LogService(ctx, logger.ServiceLog{
+				Operation: "outbox_worker",
+				Status:    "failed",
+				ErrorCode: "start_failed",
+				Metadata: map[string]interface{}{
+					"error": err.Error(),
+				},
+			})
+		}
 		return
 	}
+}
+
+func (w *Worker) StartChecked(ctx context.Context) error {
+	if err := w.Validate(); err != nil {
+		return err
+	}
+	w.startMu.Lock()
+	defer w.startMu.Unlock()
+	if w.started {
+		return ErrWorkerAlreadyStarted
+	}
 	w.started = true
-
+	w.log.LogService(ctx, logger.ServiceLog{
+		Operation: "outbox_worker",
+		Status:    "started",
+		Metadata: map[string]interface{}{
+			"driver":     w.driver,
+			"batch_size": w.batchSize,
+			"interval":   w.interval.String(),
+		},
+	})
 	go func() {
-
 		ticker := time.NewTicker(w.interval)
 		defer ticker.Stop()
 
@@ -103,14 +144,23 @@ func (w *Worker) Start(ctx context.Context) {
 			case <-w.stopChan:
 				return
 			case <-ticker.C:
-				w.processBatch(ctx)
+				_ = w.RunOnce(ctx)
 			}
 		}
 	}()
+	return nil
 }
 
 func (w *Worker) Stop(ctx context.Context) error {
-	_ = ctx
+	if w != nil && w.log != nil {
+		w.log.LogService(ctx, logger.ServiceLog{
+			Operation: "outbox_worker",
+			Status:    "shutdown_requested",
+			Metadata: map[string]interface{}{
+				"driver": w.driver,
+			},
+		})
+	}
 	if !w.started {
 		return nil
 	}
@@ -120,16 +170,18 @@ func (w *Worker) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (w *Worker) processBatch(ctx context.Context) {
-
+func (w *Worker) RunOnce(ctx context.Context) error {
+	if err := w.Validate(); err != nil {
+		return err
+	}
+	startedAt := time.Now()
+	publishedCount := 0
 	tx, err := w.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
 	})
 	if err != nil {
-		w.log.Error(ctx, "outbox begin tx failed",
-			logger.Field{Key: "error", Value: err},
-		)
-		return
+		w.observeBatch(ctx, "failed", "begin_tx_failed", 0, publishedCount, startedAt, err)
+		return err
 	}
 
 	selectQuery, selectArgs := buildSelectPendingQuery(w.driver, w.batchSize)
@@ -137,10 +189,8 @@ func (w *Worker) processBatch(ctx context.Context) {
 
 	if err != nil {
 		_ = tx.Rollback()
-		w.log.Error(ctx, "outbox query failed",
-			logger.Field{Key: "error", Value: err},
-		)
-		return
+		w.observeBatch(ctx, "failed", "query_failed", 0, publishedCount, startedAt, err)
+		return err
 	}
 
 	defer rows.Close()
@@ -168,7 +218,8 @@ func (w *Worker) processBatch(ctx context.Context) {
 			&headersRaw,
 		); err != nil {
 			_ = tx.Rollback()
-			return
+			w.observeBatch(ctx, "failed", "scan_failed", len(events), publishedCount, startedAt, err)
+			return err
 		}
 
 		if len(headersRaw) > 0 {
@@ -180,7 +231,8 @@ func (w *Worker) processBatch(ctx context.Context) {
 
 	if len(events) == 0 {
 		_ = tx.Rollback()
-		return
+		w.observeBatch(ctx, "empty", "", 0, 0, startedAt, nil)
+		return nil
 	}
 
 	for _, e := range events {
@@ -194,26 +246,52 @@ func (w *Worker) processBatch(ctx context.Context) {
 
 		if err != nil {
 			_ = tx.Rollback()
-			w.log.Error(ctx, "outbox publish failed",
-				logger.Field{Key: "event_id", Value: e.id},
-				logger.Field{Key: "error", Value: err},
-			)
-			return
+			w.observeBatch(ctx, "failed", "publish_failed", len(events), publishedCount, startedAt, err)
+			return err
 		}
+		publishedCount++
 
 		updateQuery, updateArgs := buildMarkPublishedQuery(w.driver, e.id)
 		_, err = tx.ExecContext(ctx, updateQuery, updateArgs...)
 
 		if err != nil {
 			_ = tx.Rollback()
-			return
+			w.observeBatch(ctx, "failed", "mark_published_failed", len(events), publishedCount, startedAt, err)
+			return err
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		w.log.Error(ctx, "outbox commit failed",
-			logger.Field{Key: "error", Value: err},
-		)
+		w.observeBatch(ctx, "failed", "commit_failed", len(events), publishedCount, startedAt, err)
+		return err
+	}
+	w.observeBatch(ctx, "success", "", len(events), publishedCount, startedAt, nil)
+	return nil
+}
+
+func (w *Worker) observeBatch(ctx context.Context, status string, errorCode string, batchSize int, publishedCount int, startedAt time.Time, err error) {
+	duration := time.Since(startedAt)
+	metadata := map[string]interface{}{
+		"driver":          w.driver,
+		"batch_size":      batchSize,
+		"published_count": publishedCount,
+	}
+	if err != nil {
+		metadata["error"] = err.Error()
+	}
+	if w.log != nil {
+		w.log.LogService(ctx, logger.ServiceLog{
+			Operation:  "outbox_batch",
+			Status:     status,
+			DurationMs: duration.Milliseconds(),
+			ErrorCode:  errorCode,
+			Metadata:   metadata,
+		})
+	}
+	if w.metrics != nil && w.serviceName != "" {
+		w.metrics.OutboxBatchTotal.WithLabelValues(w.serviceName, status).Inc()
+		w.metrics.OutboxBatchDuration.WithLabelValues(w.serviceName).Observe(duration.Seconds())
+		w.metrics.OutboxBatchSize.WithLabelValues(w.serviceName).Observe(float64(batchSize))
 	}
 }
 

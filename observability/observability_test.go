@@ -47,6 +47,12 @@ func TestNewMetrics_Singleton(t *testing.T) {
 	if a.DBTotal == nil || a.DBDuration == nil {
 		t.Fatalf("db metrics must not be nil")
 	}
+	if a.MessagePublishTotal == nil || a.MessageConsumeTotal == nil || a.MessageProcessDuration == nil {
+		t.Fatalf("messaging metrics must not be nil")
+	}
+	if a.OutboxBatchTotal == nil || a.OutboxBatchDuration == nil || a.OutboxBatchSize == nil {
+		t.Fatalf("outbox metrics must not be nil")
+	}
 }
 
 func TestMetricsHandler(t *testing.T) {

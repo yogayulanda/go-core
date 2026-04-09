@@ -29,6 +29,13 @@ func (e *AppError) Error() string {
 	return string(e.Code) + ": " + e.Message
 }
 
+func (e *AppError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
 func New(code Code, message string) *AppError {
 	return &AppError{
 		Code:     code,

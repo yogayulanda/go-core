@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yogayulanda/go-core/dbtx"
+	"github.com/yogayulanda/go-core/logger"
 )
 
 type sqlExec interface {
@@ -15,11 +16,13 @@ type sqlExec interface {
 }
 
 type RecordSQLRepository struct {
-	db *sql.DB
+	db     *sql.DB
+	dbName string
+	log    logger.Logger
 }
 
-func NewRecordSQLRepository(db *sql.DB) *RecordSQLRepository {
-	return &RecordSQLRepository{db: db}
+func NewRecordSQLRepository(db *sql.DB, dbName string, log logger.Logger) *RecordSQLRepository {
+	return &RecordSQLRepository{db: db, dbName: dbName, log: log}
 }
 
 func (r *RecordSQLRepository) Create(ctx context.Context, in CreateRecordInput) (string, error) {
@@ -33,6 +36,7 @@ func (r *RecordSQLRepository) Create(ctx context.Context, in CreateRecordInput) 
 	}
 
 	id := fmt.Sprintf("rec-%d", time.Now().UnixNano())
+	startedAt := time.Now()
 	_, err := exec.ExecContext(
 		ctx,
 		`INSERT INTO records (id, subject_id, reference_id, amount, created_at) VALUES (?, ?, ?, ?, ?)`,
@@ -43,8 +47,32 @@ func (r *RecordSQLRepository) Create(ctx context.Context, in CreateRecordInput) 
 		time.Now().UTC(),
 	)
 	if err != nil {
+		if r.log != nil {
+			r.log.LogDB(ctx, logger.DBLog{
+				Operation:  "record_insert",
+				DBName:     r.dbName,
+				Status:     "failed",
+				DurationMs: time.Since(startedAt).Milliseconds(),
+				ErrorCode:  "insert_failed",
+				Metadata: map[string]interface{}{
+					"reference_id": in.ReferenceID,
+					"error":        err.Error(),
+				},
+			})
+		}
 		return "", fmt.Errorf("insert record failed: %w", err)
 	}
 
+	if r.log != nil {
+		r.log.LogDB(ctx, logger.DBLog{
+			Operation:  "record_insert",
+			DBName:     r.dbName,
+			Status:     "success",
+			DurationMs: time.Since(startedAt).Milliseconds(),
+			Metadata: map[string]interface{}{
+				"record_id": id,
+			},
+		})
+	}
 	return id, nil
 }

@@ -89,6 +89,50 @@ func TestEvaluateReadiness_RedisEnabledNilCache(t *testing.T) {
 	if check.Status != checkStatusDown || !check.Required {
 		t.Fatalf("unexpected redis check: %+v", check)
 	}
+	if check.Message != "dependency unavailable" {
+		t.Fatalf("expected dependency unavailable message, got %q", check.Message)
+	}
+}
+
+func TestEvaluateReadiness_RedisDisabled_IsSkipped(t *testing.T) {
+	cfg := &config.Config{
+		Databases: map[string]config.DBConfig{},
+		Redis:     config.RedisConfig{Enabled: false},
+	}
+
+	ok, report := evaluateReadiness(context.Background(), cfg, map[string]sqlPinger{}, nil, nil, nil)
+	if !ok {
+		t.Fatalf("expected ready")
+	}
+	check, exists := report.Checks["redis"]
+	if !exists {
+		t.Fatalf("expected redis check")
+	}
+	if check.Status != checkStatusSkipped || check.Required {
+		t.Fatalf("unexpected redis check: %+v", check)
+	}
+	if check.Message != "disabled" {
+		t.Fatalf("expected disabled message, got %q", check.Message)
+	}
+}
+
+func TestEvaluateReadiness_RedisEnabledHealthy_IsUp(t *testing.T) {
+	cfg := &config.Config{
+		Databases: map[string]config.DBConfig{},
+		Redis:     config.RedisConfig{Enabled: true},
+	}
+
+	ok, report := evaluateReadiness(context.Background(), cfg, map[string]sqlPinger{}, fakeCache{}, nil, nil)
+	if !ok {
+		t.Fatalf("expected ready")
+	}
+	check, exists := report.Checks["redis"]
+	if !exists {
+		t.Fatalf("expected redis check")
+	}
+	if check.Status != checkStatusUp || !check.Required {
+		t.Fatalf("unexpected redis check: %+v", check)
+	}
 }
 
 func TestEvaluateReadiness_MemcachedEnabledCacheFail(t *testing.T) {
@@ -113,6 +157,50 @@ func TestEvaluateReadiness_MemcachedEnabledCacheFail(t *testing.T) {
 		t.Fatalf("expected memcached check")
 	}
 	if check.Status != checkStatusDown || !check.Required {
+		t.Fatalf("unexpected memcached check: %+v", check)
+	}
+	if check.Message != "health check failed" {
+		t.Fatalf("expected health check failed message, got %q", check.Message)
+	}
+}
+
+func TestEvaluateReadiness_MemcachedDisabled_IsSkipped(t *testing.T) {
+	cfg := &config.Config{
+		Databases: map[string]config.DBConfig{},
+		Memcached: config.MemcachedConfig{Enabled: false},
+	}
+
+	ok, report := evaluateReadiness(context.Background(), cfg, map[string]sqlPinger{}, nil, nil, nil)
+	if !ok {
+		t.Fatalf("expected ready")
+	}
+	check, exists := report.Checks["memcached"]
+	if !exists {
+		t.Fatalf("expected memcached check")
+	}
+	if check.Status != checkStatusSkipped || check.Required {
+		t.Fatalf("unexpected memcached check: %+v", check)
+	}
+	if check.Message != "disabled" {
+		t.Fatalf("expected disabled message, got %q", check.Message)
+	}
+}
+
+func TestEvaluateReadiness_MemcachedEnabledHealthy_IsUp(t *testing.T) {
+	cfg := &config.Config{
+		Databases: map[string]config.DBConfig{},
+		Memcached: config.MemcachedConfig{Enabled: true},
+	}
+
+	ok, report := evaluateReadiness(context.Background(), cfg, map[string]sqlPinger{}, nil, fakeCache{}, nil)
+	if !ok {
+		t.Fatalf("expected ready")
+	}
+	check, exists := report.Checks["memcached"]
+	if !exists {
+		t.Fatalf("expected memcached check")
+	}
+	if check.Status != checkStatusUp || !check.Required {
 		t.Fatalf("unexpected memcached check: %+v", check)
 	}
 }

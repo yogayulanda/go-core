@@ -15,6 +15,7 @@ type RetryOptions struct {
 	MaxDelay    time.Duration
 	Jitter      time.Duration
 	Retryable   func(err error) bool
+	OnRetry     RetryHook
 }
 
 func DefaultRetryOptions() RetryOptions {
@@ -54,12 +55,37 @@ func Do(
 			break
 		}
 		if !opts.Retryable(err) {
+			if opts.OnRetry != nil {
+				opts.OnRetry(ctx, RetryEvent{
+					Attempt:     attempt,
+					MaxAttempts: opts.MaxAttempts,
+					Status:      "stopped",
+					Err:         err,
+				})
+			}
 			return err
 		}
 
 		delay := computeBackoff(attempt, opts)
+		if opts.OnRetry != nil {
+			opts.OnRetry(ctx, RetryEvent{
+				Attempt:     attempt,
+				MaxAttempts: opts.MaxAttempts,
+				Delay:       delay,
+				Status:      "retry_scheduled",
+				Err:         err,
+			})
+		}
 		select {
 		case <-ctx.Done():
+			if opts.OnRetry != nil {
+				opts.OnRetry(ctx, RetryEvent{
+					Attempt:     attempt,
+					MaxAttempts: opts.MaxAttempts,
+					Status:      "canceled",
+					Err:         ctx.Err(),
+				})
+			}
 			return ctx.Err()
 		case <-time.After(delay):
 		}

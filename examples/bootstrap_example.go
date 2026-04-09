@@ -2,14 +2,15 @@ package examples
 
 import (
 	"context"
+	"time"
 
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	coreapp "github.com/yogayulanda/go-core/app"
 	coreconfig "github.com/yogayulanda/go-core/config"
 	coremigration "github.com/yogayulanda/go-core/migration"
 	coreserver "github.com/yogayulanda/go-core/server"
 	coregateway "github.com/yogayulanda/go-core/server/gateway"
 	coregrpc "github.com/yogayulanda/go-core/server/grpc"
-	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 )
 
@@ -44,9 +45,18 @@ func BootstrapExample(
 		return err
 	}
 
+	// Optional messaging primitives remain explicit and service-owned.
+	if application.Config().Kafka.Enabled {
+		if _, err := application.NewKafkaPublisher(); err != nil {
+			return err
+		}
+	}
+
 	if registerGRPC != nil {
 		grpcServer.Register(registerGRPC)
 	}
+
+	go coreserver.LogStartupReadiness(ctx, application.Logger(), cfg.GRPC.Port, cfg.HTTP.Port, 10*time.Second, cfg.HTTP.TLSEnabled)
 
 	return coreserver.Run(ctx, application, grpcServer, gatewayServer)
 }

@@ -145,6 +145,10 @@ func metricsInterceptor(app *app.App) grpc.UnaryServerInterceptor {
 }
 
 func authInterceptor(verifier *security.InternalJWTVerifier) grpc.UnaryServerInterceptor {
+	return authInterceptorWithLogger(verifier, nil)
+}
+
+func authInterceptorWithLogger(verifier *security.InternalJWTVerifier, log logger.Logger) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req interface{},
@@ -154,12 +158,17 @@ func authInterceptor(verifier *security.InternalJWTVerifier) grpc.UnaryServerInt
 		if verifier != nil && verifier.Enabled() && verifier.ShouldAuthenticate(info.FullMethod) {
 			token, err := bearerTokenFromMetadata(ctx)
 			if err != nil {
-				return nil, status.Error(codes.Unauthenticated, err.Error())
+				logAuthResult(ctx, log, verifier, info.FullMethod, "failed", authExtractionErrorCode(err), nil)
+				return nil, status.Error(codes.Unauthenticated, authClientErrorMessage())
 			}
 
 			claims, err := verifier.Verify(token)
 			if err != nil {
-				return nil, status.Error(codes.Unauthenticated, err.Error())
+				logAuthResult(ctx, log, verifier, info.FullMethod, "failed", security.AuthErrorCode(err), map[string]interface{}{
+					"issuer_set":   verifier.ConfigMetadata()["issuer_set"],
+					"audience_set": verifier.ConfigMetadata()["audience_set"],
+				})
+				return nil, status.Error(codes.Unauthenticated, authClientErrorMessage())
 			}
 
 			if claims != nil {
@@ -174,6 +183,7 @@ func authInterceptor(verifier *security.InternalJWTVerifier) grpc.UnaryServerInt
 			if claims != nil {
 				ctx = security.Inject(ctx, claims)
 			}
+			logAuthResult(ctx, log, verifier, info.FullMethod, "success", "", security.ExtractMetadataSummary(ctx))
 		}
 
 		return handler(ctx, req)
@@ -183,27 +193,27 @@ func authInterceptor(verifier *security.InternalJWTVerifier) grpc.UnaryServerInt
 func bearerTokenFromMetadata(ctx context.Context) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return "", errors.New("missing metadata")
+		return "", errMissingMetadata
 	}
 
 	values := md.Get("authorization")
 	if len(values) == 0 {
-		return "", errors.New("missing authorization header")
+		return "", errMissingAuthorization
 	}
 
 	raw := strings.TrimSpace(values[0])
 	if raw == "" {
-		return "", errors.New("authorization header is empty")
+		return "", errAuthorizationHeaderEmpty
 	}
 
 	parts := strings.SplitN(raw, " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return "", errors.New("invalid authorization scheme")
+		return "", errInvalidAuthorization
 	}
 
 	token := strings.TrimSpace(parts[1])
 	if token == "" {
-		return "", errors.New("authorization token is empty")
+		return "", errAuthorizationTokenEmpty
 	}
 
 	return token, nil

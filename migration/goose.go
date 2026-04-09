@@ -11,6 +11,7 @@ import (
 
 	"github.com/pressly/goose/v3"
 	"github.com/yogayulanda/go-core/config"
+	"github.com/yogayulanda/go-core/logger"
 )
 
 type Runner interface {
@@ -76,29 +77,52 @@ func (GooseRunner) Run(db *sql.DB, driver string, dir string, action string) err
 }
 
 func AutoRunUp(cfg *config.Config) error {
-	return AutoRunUpWithRunner(cfg, defaultRunner)
+	return AutoRunUpWithRunnerAndLogger(cfg, defaultRunner, nil)
 }
 
 func AutoRunUpWithRunner(cfg *config.Config, runner Runner) error {
+	return AutoRunUpWithRunnerAndLogger(cfg, runner, nil)
+}
+
+func AutoRunUpWithLogger(cfg *config.Config, log logger.Logger) error {
+	return AutoRunUpWithRunnerAndLogger(cfg, defaultRunner, log)
+}
+
+func AutoRunUpWithRunnerAndLogger(cfg *config.Config, runner Runner, log logger.Logger) error {
+	startedAt := time.Now()
 	if !cfg.Migration.AutoRun {
+		logMigration(context.Background(), log, "migration_autorun", "skipped", startedAt, "", map[string]interface{}{
+			"auto_run": false,
+		})
 		return nil
 	}
 	if runner == nil {
+		logMigration(context.Background(), log, "migration_autorun", "failed", startedAt, "runner_nil", map[string]interface{}{
+			"auto_run": true,
+		})
 		return fmt.Errorf("migration runner is nil")
 	}
 
 	dbName := config.NormalizeDBAlias(cfg.Migration.DBName)
 	db, dbCfg, err := openSQLDBFn(cfg, dbName)
 	if err != nil {
+		logMigration(context.Background(), log, "migration_autorun", "failed", startedAt, "open_db_failed", map[string]interface{}{
+			"db_name": dbName,
+		})
 		return err
 	}
 	defer db.Close()
 
 	if err := ensureGooseVersionTableFn(dbCfg.Driver, db); err != nil {
+		logMigration(context.Background(), log, "migration_autorun", "failed", startedAt, "ensure_version_table_failed", map[string]interface{}{
+			"db_name": dbName,
+			"driver":  dbCfg.Driver,
+		})
 		return err
 	}
 
 	if cfg.Migration.LockEnabled {
+		lockStartedAt := time.Now()
 		lockKey := strings.TrimSpace(cfg.Migration.LockKey)
 		if lockKey == "" {
 			lockKey = defaultMigrationLockKey(cfg, dbName)
@@ -112,14 +136,60 @@ func AutoRunUpWithRunner(cfg *config.Config, runner Runner) error {
 			cfg.Migration.LockTimeout,
 		)
 		if err != nil {
+			logMigration(context.Background(), log, "migration_lock", "failed", lockStartedAt, "lock_acquire_failed", map[string]interface{}{
+				"db_name":    dbName,
+				"driver":     dbCfg.Driver,
+				"lock_key":   lockKey,
+				"timeout_ms": cfg.Migration.LockTimeout.Milliseconds(),
+			})
+			logMigration(context.Background(), log, "migration_autorun", "failed", startedAt, "lock_acquire_failed", map[string]interface{}{
+				"db_name":  dbName,
+				"driver":   dbCfg.Driver,
+				"lock_key": lockKey,
+			})
 			return err
 		}
+		logMigration(context.Background(), log, "migration_lock", "success", lockStartedAt, "", map[string]interface{}{
+			"db_name":    dbName,
+			"driver":     dbCfg.Driver,
+			"lock_key":   lockKey,
+			"timeout_ms": cfg.Migration.LockTimeout.Milliseconds(),
+		})
 		defer func() {
-			_ = release(context.Background())
+			releaseStartedAt := time.Now()
+			if err := release(context.Background()); err != nil {
+				logMigration(context.Background(), log, "migration_lock", "failed", releaseStartedAt, "lock_release_failed", map[string]interface{}{
+					"db_name":  dbName,
+					"driver":   dbCfg.Driver,
+					"lock_key": lockKey,
+				})
+				return
+			}
+			logMigration(context.Background(), log, "migration_lock", "released", releaseStartedAt, "", map[string]interface{}{
+				"db_name":  dbName,
+				"driver":   dbCfg.Driver,
+				"lock_key": lockKey,
+			})
 		}()
 	}
 
-	return runner.Run(db, dbCfg.Driver, cfg.Migration.Dir, "up")
+	if err := runner.Run(db, dbCfg.Driver, cfg.Migration.Dir, "up"); err != nil {
+		logMigration(context.Background(), log, "migration_autorun", "failed", startedAt, "run_failed", map[string]interface{}{
+			"db_name":      dbName,
+			"driver":       dbCfg.Driver,
+			"dir":          cfg.Migration.Dir,
+			"lock_enabled": cfg.Migration.LockEnabled,
+		})
+		return err
+	}
+
+	logMigration(context.Background(), log, "migration_autorun", "success", startedAt, "", map[string]interface{}{
+		"db_name":      dbName,
+		"driver":       dbCfg.Driver,
+		"dir":          cfg.Migration.Dir,
+		"lock_enabled": cfg.Migration.LockEnabled,
+	})
+	return nil
 }
 
 func SetDefaultRunner(r Runner) {

@@ -85,3 +85,26 @@ func TestNewInternalJWTVerifier_NormalizeMethodSet(t *testing.T) {
 		t.Fatalf("expected exclude method to exist")
 	}
 }
+
+func TestInternalJWTVerifier_ConfigMetadata(t *testing.T) {
+	v := &InternalJWTVerifier{
+		enabled:  true,
+		issuer:   "issuer",
+		audience: "aud",
+		leeway:   15 * time.Second,
+		includeMethods: map[string]struct{}{
+			"/svc/Method": {},
+		},
+	}
+
+	meta := v.ConfigMetadata()
+	if meta["auth_mode"] != "jwt" {
+		t.Fatalf("expected jwt auth mode, got %v", meta["auth_mode"])
+	}
+	if meta["policy_mode"] != "include" {
+		t.Fatalf("expected include policy mode, got %v", meta["policy_mode"])
+	}
+	if meta["include_method_count"] != 1 {
+		t.Fatalf("expected include count 1, got %v", meta["include_method_count"])
+	}
+}

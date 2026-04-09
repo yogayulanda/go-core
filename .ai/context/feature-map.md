@@ -14,7 +14,7 @@ Feature Map
 - tracing and metrics bootstrap: `observability/`
 - auth extraction and JWT verification: `security/`
 - cache adapters: `cache/`
-- messaging abstraction and outbox: `messaging/`, `messaging/outbox/`
-- messaging/outbox consumption pattern: `docs/MESSAGING_PATTERN.md`, `examples/outbox_example.go`
+- messaging abstraction and outbox with additive runtime observability: `messaging/`, `messaging/outbox/`
+- messaging/outbox consumption pattern and explicit worker ownership: `docs/MESSAGING_PATTERN.md`, `examples/outbox_example.go`
 - timeout and retry helpers: `resilience/`
 - examples and implementation templates: `examples/`, `templates/`, `docs/SERVICE_BOOTSTRAP.md`

@@ -39,8 +39,8 @@ They are not a license to move business rules into `go-core`.
   - `DBLog` for DB operational and query-related logging.
   - optional `TransactionLog` for transaction-oriented service monitoring.
 - Multi-database initialization (`database`) with named DB map.
-- Optional Redis cache initialization (`cache/redis`).
-- Optional Memcached cache initialization (`cache/memcached`).
+- Optional Redis cache dependency initialization (`cache/redis`) with fail-fast startup ping and aligned `cache_connect` `ServiceLog`.
+- Optional Memcached cache dependency initialization (`cache/memcached`) with fail-fast health check, miss-tolerant readiness probe, and aligned `cache_connect` `ServiceLog`.
 - gRPC server wrapper + interceptors (`server/grpc`):
   - recovery
   - request-id
@@ -67,12 +67,18 @@ They are not a license to move business rules into `go-core`.
   - `app_service_operation_duration_seconds{service,operation}`
   - `app_db_operation_total{service,db_name,operation,status}`
   - `app_db_operation_duration_seconds{service,db_name,operation}`
+  - `app_message_publish_total{service,topic,status}`
+  - `app_message_consume_total{service,topic,group,status}`
+  - `app_message_process_duration_seconds{service,topic,group}`
+  - `app_outbox_batch_total{service,status}`
+  - `app_outbox_batch_duration_seconds{service}`
+  - `app_outbox_batch_size{service}`
   - `app_transaction_total{service,operation,status}`
-- Kafka publisher/consumer abstraction (`messaging`).
-- Outbox helpers (`messaging/outbox`) with driver-aware SQL (`mysql|postgres|sqlserver`).
+- Kafka publisher/consumer abstraction (`messaging`) with additive logger/metrics options and app-level defaults.
+- Outbox helpers (`messaging/outbox`) with driver-aware SQL (`mysql|postgres|sqlserver`), `RunOnce(...)`, and explicit `StartChecked(...)`.
 - Goose migration helper (`migration`) including auto-run support.
 - DB transaction helper (`dbtx`) with context propagation (`WithTx`, `WithTxOptions`).
-- Outbound resilience helper (`resilience`) for timeout + retry policy.
+- Outbound resilience helper (`resilience`) for timeout + retry policy, plus additive retry/timeout hooks for logger-backed observability.
 - Common app error contract + mapper (`errors`) with stable code and optional validation details.
 
 ### Security scope
@@ -95,6 +101,12 @@ They are not a license to move business rules into `go-core`.
   - `attributes` object -> `Claims.Attributes`
 - `INTERNAL_JWT_PUBLIC_KEY` is required when JWT is enabled.
 - Optional transport TLS is supported for gRPC and HTTP gateway (`GRPC_TLS_*`, `HTTP_TLS_*`).
+
+Operational notes:
+
+- gRPC startup emits `auth_config` so operators can confirm whether the service is running in metadata extraction mode or JWT verification mode.
+- JWT auth failures are sanitized to clients as unauthorized responses.
+- internal service logs keep stable auth failure reasons such as missing authorization header, invalid token, invalid issuer, and invalid audience.
 
 ### Configuration
 
@@ -166,6 +178,12 @@ Migration:
 
 When lock is enabled, auto-migration uses DB-native locks to avoid concurrent `goose up` on multi-pod startup (`sp_getapplock` for SQL Server, `GET_LOCK` for MySQL, advisory lock for Postgres).
 
+Migration runtime notes:
+
+- `migration.AutoRunUp(cfg)` remains the compact explicit entry point.
+- `migration.AutoRunUpWithLogger(cfg, log)` is available when the service wants startup migration runtime signals through `ServiceLog`.
+- logger-aware autorun emits `migration_autorun` and `migration_lock` without adding hidden startup behavior.
+
 Observability:
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT` (optional)
@@ -180,12 +198,25 @@ Redis:
 - `REDIS_PASSWORD`
 - `REDIS_DB` (default: `0`)
 
+Behavior:
+
+- enabling Redis means the service has chosen Redis as a required runtime dependency
+- Redis initialization is fail-fast during `app.New(...)`
+- `/ready` reports Redis as required when enabled and returns `503` if Redis health fails
+
 Memcached:
 
 - `MEMCACHED_ENABLED` (default: `false`)
 - `MEMCACHED_SERVERS` (comma-separated, required if enabled)
 - `MEMCACHED_ADDRESS` (single address fallback, optional alternative to `MEMCACHED_SERVERS`)
 - `MEMCACHED_TIMEOUT` (default: `2s`)
+
+Behavior:
+
+- enabling Memcached means the service has chosen Memcached as a required runtime dependency
+- Memcached initialization is fail-fast during `app.New(...)`
+- Memcached health uses a bounded `Get(...)` probe where `cache miss` is treated as healthy by design
+- `/ready` reports Memcached as required when enabled and returns `503` if Memcached health fails
 
 Kafka:
 
@@ -270,7 +301,9 @@ Notes:
 - `details` is optional, typically used for validation errors.
 - Internal classification such as error category is kept in logs, not exposed in API response.
 - gRPC mapper keeps stable error code via `ErrorInfo.reason`.
+- `SESSION_EXPIRED` remains a stable contract code even though it shares gRPC `Unauthenticated` with `UNAUTHORIZED`.
 - Unknown external `ErrorInfo.reason` values are sanitized and fallback to gRPC status mapping.
+- Gateway JSON responses are built from the same canonical contract and sanitize unknown transport errors.
 
 ### Readiness behavior
 
@@ -286,6 +319,12 @@ Required dependencies:
 - Redis (if `REDIS_ENABLED=true`)
 - Memcached (if `MEMCACHED_ENABLED=true`)
 - Kafka broker reachability (if `KAFKA_ENABLED=true`)
+
+Cache notes:
+
+- enabling Redis or Memcached is an explicit service choice, not passive configuration
+- cache initialization is fail-fast during app bootstrap
+- cache runtime startup emits `ServiceLog` with `operation=cache_connect`
 
 Example response:
 
@@ -325,6 +364,8 @@ Use:
 - Redis, Memcached, Kafka, and migration only when the service explicitly chooses them
 - rely on `server.Run(...)` lifecycle/service logs for startup, shutdown, and component failure orchestration
 - rely on gateway/gRPC transport wrappers for aligned request ID, request metrics, and additive service metrics
+- rely on `app.NewKafkaPublisher(...)` / `app.NewKafkaConsumer(...)` for default messaging logger + metrics wiring when Kafka is enabled
+- keep outbox worker startup explicit through `outbox.Worker.StartChecked(ctx)` or service-controlled `RunOnce(ctx)`
 
 ### Logging flavors
 
@@ -346,6 +387,9 @@ Runtime and transport alignment now means:
 - `server.LogStartupReadiness(...)` emits readiness `ServiceLog` instead of ad hoc startup strings.
 - gRPC request flow emits both request metrics and additive service metrics under `grpc_request`.
 - HTTP gateway flow emits both HTTP metrics and additive service metrics under `http_request`.
+- publisher flow emits `message_publish` service logs plus `app_message_publish_total`.
+- consumer flow emits `message_consume` service logs plus consume/process metrics.
+- outbox worker emits `outbox_worker` and `outbox_batch` service logs plus outbox batch metrics.
 
 ### Minimal integration flow in a service
 

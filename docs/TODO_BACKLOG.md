@@ -4,17 +4,16 @@ This backlog lists improvement areas that are still untouched or only lightly to
 
 ## P1
 
-- messaging and outbox runtime:
-  bring publisher/consumer/worker observability and ownership up to the same standard as DB/logging
-- examples refresh:
-  upgrade older examples so they reflect the current golden path, not older partial patterns
-
 Recently completed:
 
 - runtime orchestration:
   `app/` and `server/` now emit aligned `ServiceLog` for init, startup, readiness, orchestration, shutdown, and component failure signals
 - transport alignment:
   gRPC and gateway now emit aligned request ID, request metrics, service metrics, and structured `ServiceLog`
+- messaging and outbox runtime:
+  publisher, consumer, and outbox worker now emit aligned `ServiceLog` and additive messaging/outbox metrics without hidden startup behavior
+- examples refresh:
+  older examples now reflect the current bootstrap, logging, DB, and messaging golden path
 
 ## P2
 

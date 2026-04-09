@@ -29,3 +29,23 @@ func TestExtractFromMetadata_GenericHeaders(t *testing.T) {
 		t.Fatalf("expected tenant attribute")
 	}
 }
+
+func TestExtractMetadataSummary_MetadataModeSignals(t *testing.T) {
+	ctx := metadata.NewIncomingContext(
+		context.Background(),
+		metadata.Pairs(
+			"x-subject", "user-1",
+			"x-role", "admin",
+			"x-claim-tenant", "acme",
+			"x-claim-region", "id",
+		),
+	)
+
+	summary := ExtractMetadataSummary(ctx)
+	if summary["metadata_present"] != true {
+		t.Fatalf("expected metadata_present true, got %v", summary["metadata_present"])
+	}
+	if summary["claim_count"] != 2 {
+		t.Fatalf("expected claim_count 2, got %v", summary["claim_count"])
+	}
+}

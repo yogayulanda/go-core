@@ -14,6 +14,13 @@ import (
 	"github.com/yogayulanda/go-core/config"
 )
 
+var (
+	errAuthorizationTokenEmpty = errors.New("authorization token is empty")
+	errInvalidToken            = errors.New("invalid token")
+	errInvalidTokenIssuer      = errors.New("invalid token issuer")
+	errInvalidTokenAudience    = errors.New("invalid token audience")
+)
+
 type InternalJWTVerifier struct {
 	enabled        bool
 	publicKey      *rsa.PublicKey
@@ -56,7 +63,7 @@ func (v *InternalJWTVerifier) Verify(token string) (*Claims, error) {
 		return nil, nil
 	}
 	if strings.TrimSpace(token) == "" {
-		return nil, errors.New("authorization token is empty")
+		return nil, errAuthorizationTokenEmpty
 	}
 
 	parser := jwt.NewParser(
@@ -70,18 +77,18 @@ func (v *InternalJWTVerifier) Verify(token string) (*Claims, error) {
 		return v.publicKey, nil
 	})
 	if err != nil || !parsed.Valid {
-		return nil, errors.New("invalid token")
+		return nil, errInvalidToken
 	}
 
 	if v.issuer != "" {
 		if !matchIssuer(claims, v.issuer) {
-			return nil, errors.New("invalid token issuer")
+			return nil, errInvalidTokenIssuer
 		}
 	}
 
 	if v.audience != "" {
 		if !matchAudience(claims, v.audience) {
-			return nil, errors.New("invalid token audience")
+			return nil, errInvalidTokenAudience
 		}
 	}
 
@@ -108,6 +115,66 @@ func (v *InternalJWTVerifier) ShouldAuthenticate(fullMethod string) bool {
 	}
 
 	return true
+}
+
+func (v *InternalJWTVerifier) AuthMode() string {
+	if v != nil && v.Enabled() {
+		return "jwt"
+	}
+	return "metadata"
+}
+
+func (v *InternalJWTVerifier) PolicyMode() string {
+	if v == nil || !v.Enabled() {
+		return "metadata"
+	}
+	if len(v.includeMethods) > 0 {
+		return "include"
+	}
+	if len(v.excludeMethods) > 0 {
+		return "exclude"
+	}
+	return "all"
+}
+
+func (v *InternalJWTVerifier) ConfigMetadata() map[string]interface{} {
+	if v == nil {
+		return map[string]interface{}{
+			"auth_mode":    "metadata",
+			"policy_mode":  "metadata",
+			"jwt_enabled":  false,
+			"issuer_set":   false,
+			"audience_set": false,
+		}
+	}
+
+	return map[string]interface{}{
+		"auth_mode":            v.AuthMode(),
+		"policy_mode":          v.PolicyMode(),
+		"jwt_enabled":          v.Enabled(),
+		"issuer_set":           v.issuer != "",
+		"audience_set":         v.audience != "",
+		"include_method_count": len(v.includeMethods),
+		"exclude_method_count": len(v.excludeMethods),
+		"leeway_ms":            v.leeway.Milliseconds(),
+	}
+}
+
+func AuthErrorCode(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, errAuthorizationTokenEmpty):
+		return "authorization_token_empty"
+	case errors.Is(err, errInvalidToken):
+		return "invalid_token"
+	case errors.Is(err, errInvalidTokenIssuer):
+		return "invalid_token_issuer"
+	case errors.Is(err, errInvalidTokenAudience):
+		return "invalid_token_audience"
+	default:
+		return "auth_failed"
+	}
 }
 
 func matchIssuer(claims jwt.MapClaims, expected string) bool {

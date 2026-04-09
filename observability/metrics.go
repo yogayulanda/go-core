@@ -12,15 +12,21 @@ import (
 
 // Metrics holds core Prometheus metrics used by go-core.
 type Metrics struct {
-	RequestTotal        *prometheus.CounterVec
-	RequestDuration     *prometheus.HistogramVec
-	HTTPRequestTotal    *prometheus.CounterVec
-	HTTPRequestDuration *prometheus.HistogramVec
-	ServiceTotal        *prometheus.CounterVec
-	ServiceDuration     *prometheus.HistogramVec
-	DBTotal             *prometheus.CounterVec
-	DBDuration          *prometheus.HistogramVec
-	TransactionTotal    *prometheus.CounterVec
+	RequestTotal           *prometheus.CounterVec
+	RequestDuration        *prometheus.HistogramVec
+	HTTPRequestTotal       *prometheus.CounterVec
+	HTTPRequestDuration    *prometheus.HistogramVec
+	ServiceTotal           *prometheus.CounterVec
+	ServiceDuration        *prometheus.HistogramVec
+	DBTotal                *prometheus.CounterVec
+	DBDuration             *prometheus.HistogramVec
+	MessagePublishTotal    *prometheus.CounterVec
+	MessageConsumeTotal    *prometheus.CounterVec
+	MessageProcessDuration *prometheus.HistogramVec
+	OutboxBatchTotal       *prometheus.CounterVec
+	OutboxBatchDuration    *prometheus.HistogramVec
+	OutboxBatchSize        *prometheus.HistogramVec
+	TransactionTotal       *prometheus.CounterVec
 }
 
 var (
@@ -91,6 +97,51 @@ func NewMetrics() *Metrics {
 					Buckets: prometheus.DefBuckets,
 				},
 				[]string{"service", "db_name", "operation"},
+			),
+			MessagePublishTotal: registerOrReuseCounterVec(
+				prometheus.CounterOpts{
+					Name: "app_message_publish_total",
+					Help: "Total number of message publish attempts by final status.",
+				},
+				[]string{"service", "topic", "status"},
+			),
+			MessageConsumeTotal: registerOrReuseCounterVec(
+				prometheus.CounterOpts{
+					Name: "app_message_consume_total",
+					Help: "Total number of message consume attempts by final status.",
+				},
+				[]string{"service", "topic", "group", "status"},
+			),
+			MessageProcessDuration: registerOrReuseHistogramVec(
+				prometheus.HistogramOpts{
+					Name:    "app_message_process_duration_seconds",
+					Help:    "Message handler processing duration in seconds.",
+					Buckets: prometheus.DefBuckets,
+				},
+				[]string{"service", "topic", "group"},
+			),
+			OutboxBatchTotal: registerOrReuseCounterVec(
+				prometheus.CounterOpts{
+					Name: "app_outbox_batch_total",
+					Help: "Total number of outbox batch executions by status.",
+				},
+				[]string{"service", "status"},
+			),
+			OutboxBatchDuration: registerOrReuseHistogramVec(
+				prometheus.HistogramOpts{
+					Name:    "app_outbox_batch_duration_seconds",
+					Help:    "Outbox batch execution duration in seconds.",
+					Buckets: prometheus.DefBuckets,
+				},
+				[]string{"service"},
+			),
+			OutboxBatchSize: registerOrReuseHistogramVec(
+				prometheus.HistogramOpts{
+					Name:    "app_outbox_batch_size",
+					Help:    "Outbox batch size distribution.",
+					Buckets: []float64{1, 5, 10, 25, 50, 100, 250, 500},
+				},
+				[]string{"service"},
 			),
 			TransactionTotal: registerOrReuseCounterVec(
 				prometheus.CounterOpts{

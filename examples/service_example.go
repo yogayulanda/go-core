@@ -3,8 +3,10 @@ package examples
 import (
 	"context"
 	"strings"
+	"time"
 
 	coreerrors "github.com/yogayulanda/go-core/errors"
+	"github.com/yogayulanda/go-core/logger"
 )
 
 type CreateRecordInput struct {
@@ -19,13 +21,15 @@ type RecordRepository interface {
 
 type RecordService struct {
 	repo RecordRepository
+	log  logger.Logger
 }
 
-func NewRecordService(repo RecordRepository) *RecordService {
-	return &RecordService{repo: repo}
+func NewRecordService(repo RecordRepository, log logger.Logger) *RecordService {
+	return &RecordService{repo: repo, log: log}
 }
 
 func (s *RecordService) Create(ctx context.Context, in CreateRecordInput) (string, error) {
+	startedAt := time.Now()
 	if strings.TrimSpace(in.SubjectID) == "" {
 		return "", coreerrors.Validation("invalid request", coreerrors.Detail{Field: "subject_id", Reason: "required"})
 	}
@@ -38,8 +42,32 @@ func (s *RecordService) Create(ctx context.Context, in CreateRecordInput) (strin
 
 	id, err := s.repo.Create(ctx, in)
 	if err != nil {
+		if s.log != nil {
+			s.log.LogService(ctx, logger.ServiceLog{
+				Operation:  "record_create",
+				Status:     "failed",
+				DurationMs: time.Since(startedAt).Milliseconds(),
+				ErrorCode:  "repository_error",
+				Metadata: map[string]interface{}{
+					"reference_id": in.ReferenceID,
+					"error":        err.Error(),
+				},
+			})
+		}
 		return "", coreerrors.Wrap(coreerrors.CodeInternal, "create record failed", err)
 	}
 
+	if s.log != nil {
+		s.log.LogService(ctx, logger.ServiceLog{
+			Operation:  "record_create",
+			Status:     "success",
+			DurationMs: time.Since(startedAt).Milliseconds(),
+			Metadata: map[string]interface{}{
+				"record_id":    id,
+				"reference_id": in.ReferenceID,
+				"amount":       in.Amount,
+			},
+		})
+	}
 	return id, nil
 }

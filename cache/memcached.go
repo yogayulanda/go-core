@@ -2,26 +2,53 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/yogayulanda/go-core/config"
+	"github.com/yogayulanda/go-core/logger"
 )
 
 type memcachedClient struct {
-	client *memcache.Client
+	client memcachedBackend
 }
 
-func NewMemcachedFromConfig(cfg config.MemcachedConfig) (Cache, error) {
+type memcachedBackend interface {
+	Get(key string) (*memcache.Item, error)
+	Set(item *memcache.Item) error
+	Delete(key string) error
+}
+
+type memcachedPinger interface {
+	Get(key string) (*memcache.Item, error)
+}
+
+var newMemcachedBackend = func(cfg config.MemcachedConfig) memcachedBackend {
 	client := memcache.New(cfg.Servers...)
 	client.Timeout = cfg.Timeout
+	return client
+}
+
+func NewMemcachedFromConfig(cfg config.MemcachedConfig, log logger.Logger) (Cache, error) {
+	startedAt := time.Now()
+	client := newMemcachedBackend(cfg)
 
 	// Fail-fast check.
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
 	if err := healthCheckMemcached(ctx, client); err != nil {
+		logConnect(ctx, log, "memcached", startedAt, "failed", "health_check_failed", map[string]interface{}{
+			"servers":    cfg.Servers,
+			"timeout_ms": cfg.Timeout.Milliseconds(),
+		})
 		return nil, err
 	}
+
+	logConnect(ctx, log, "memcached", startedAt, "success", "", map[string]interface{}{
+		"servers":    cfg.Servers,
+		"timeout_ms": cfg.Timeout.Milliseconds(),
+	})
 
 	return &memcachedClient{client: client}, nil
 }
@@ -65,11 +92,11 @@ func (m *memcachedClient) Close() error {
 	return nil
 }
 
-func healthCheckMemcached(ctx context.Context, c *memcache.Client) error {
+func healthCheckMemcached(ctx context.Context, c memcachedPinger) error {
 	done := make(chan error, 1)
 	go func() {
 		_, err := c.Get("__go_core_memcached_healthcheck__")
-		if err == memcache.ErrCacheMiss || err == nil {
+		if err == nil || errors.Is(err, memcache.ErrCacheMiss) {
 			done <- nil
 			return
 		}

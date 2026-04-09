@@ -1,4 +1,4 @@
-Status: pending
+Status: done
 
 Task: refresh examples suite
 

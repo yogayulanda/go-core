@@ -19,6 +19,8 @@ Use this as the canonical onboarding path for a new service consuming `go-core`.
 - Use `logger.DBLog` when DB interaction needs structured operational/query logging.
 - Keep optional infra explicit:
   Redis, Memcached, Kafka, migration, and transaction logging are opt-in by the consuming service.
+- If Kafka is enabled, prefer `application.NewKafkaPublisher(...)` and `application.NewKafkaConsumer(...)` so logger and metrics defaults are wired automatically.
+- If using outbox, keep worker startup explicit through `StartChecked(ctx)` and use `RunOnce(ctx)` for deterministic tests or service-controlled batch execution.
 - Use `server.LogStartupReadiness(...)` if startup readiness logs are needed.
 - Treat `server.Run(...)` as the owner of runtime orchestration; it now emits structured lifecycle/service logs for startup, shutdown, and component failures.
 - Treat gRPC and gateway wrappers as the default transport observability boundary; they emit aligned request ID, request metrics, service metrics, and `ServiceLog`.
@@ -50,10 +52,14 @@ Other services should stay on the generic logging and request metrics baseline u
 - `server.Run(...)` emits `runtime_orchestration` and `component_start` results.
 - gRPC transport emits `grpc_request` service logs plus request/service metrics.
 - HTTP gateway emits `http_request` service logs plus HTTP/service metrics.
+- messaging publisher emits `message_publish` service logs plus publish metrics.
+- messaging consumer emits `message_consume` service logs plus consume/process metrics.
+- outbox runtime emits `outbox_worker` and `outbox_batch` service logs plus batch metrics.
 
 ## Related Starter Assets
 
 - `examples/bootstrap_example.go`
 - `examples/service_example.go`
 - `examples/repository_example.go`
+- `examples/grpc_handler_example.go`
 - `examples/outbox_example.go`

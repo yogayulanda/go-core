@@ -29,6 +29,8 @@ func NewRecordGRPCHandler(uc RecordUseCase) *RecordGRPCHandler {
 }
 
 func (h *RecordGRPCHandler) CreateRecord(ctx context.Context, req *CreateRecordRequest) (*CreateRecordResponse, error) {
+	// Transport-level request ID, metrics, and structured request logging
+	// are provided by go-core gRPC interceptors, not by handler code.
 	if req == nil {
 		return nil, coreerrors.ToGRPC(coreerrors.Validation("invalid request", coreerrors.Detail{Field: "request", Reason: "required"}))
 	}

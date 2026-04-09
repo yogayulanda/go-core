@@ -5,6 +5,9 @@ import (
 	"strings"
 )
 
+// This example is intentionally isolated utility-style sample code.
+// It is not part of the canonical go-core service bootstrap path.
+
 const (
 	DefaultPageSize = 20
 	MaxPageSize     = 100

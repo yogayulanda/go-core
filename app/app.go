@@ -86,7 +86,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	// 6. Redis (optional)
 	var redisClient cache.Cache
 	if cfg.Redis.Enabled {
-		client, err := cache.NewRedisFromConfig(cfg.Redis)
+		client, err := cache.NewRedisFromConfig(cfg.Redis, log.WithComponent("cache"))
 		if err != nil {
 			return nil, fmt.Errorf("init redis failed: %w", err)
 		}
@@ -100,7 +100,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	// 7. Memcached (optional)
 	var memcachedClient cache.Cache
 	if cfg.Memcached.Enabled {
-		client, err := cache.NewMemcachedFromConfig(cfg.Memcached)
+		client, err := cache.NewMemcachedFromConfig(cfg.Memcached, log.WithComponent("cache"))
 		if err != nil {
 			return nil, fmt.Errorf("init memcached failed: %w", err)
 		}
@@ -194,7 +194,11 @@ func (a *App) NewKafkaPublisher(
 		return nil, ErrKafkaDisabled
 	}
 
-	pub, err := messaging.NewKafkaPublisher(a.cfg.Kafka, opts...)
+	defaultOpts := []messaging.PublisherOption{
+		messaging.WithPublisherLogger(a.logger),
+		messaging.WithPublisherMetrics(a.metrics, a.cfg.App.ServiceName),
+	}
+	pub, err := messaging.NewKafkaPublisher(a.cfg.Kafka, append(defaultOpts, opts...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -219,12 +223,16 @@ func (a *App) NewKafkaConsumer(
 		return nil, ErrKafkaDisabled
 	}
 
+	defaultOpts := []messaging.ConsumerOption{
+		messaging.WithConsumerLogger(a.logger),
+		messaging.WithConsumerMetrics(a.metrics, a.cfg.App.ServiceName),
+	}
 	consumer, err := messaging.NewKafkaConsumer(
 		a.cfg.Kafka,
 		topic,
 		groupID,
 		handler,
-		opts...,
+		append(defaultOpts, opts...)...,
 	)
 	if err != nil {
 		return nil, err

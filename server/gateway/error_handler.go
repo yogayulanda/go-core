@@ -9,6 +9,7 @@ import (
 	"github.com/yogayulanda/go-core/observability"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	coreErrors "github.com/yogayulanda/go-core/errors"
@@ -27,27 +28,39 @@ func customErrorHandler(app *app.App) runtime.ErrorHandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("x-request-id", requestID)
 
-		st, ok := status.FromError(err)
-		if !ok {
-			w.WriteHeader(http.StatusInternalServerError)
-			_ = json.NewEncoder(w).Encode(coreErrors.ErrorResponse{
-				Code:      string(coreErrors.CodeInternal),
-				Message:   "internal server error",
-				RequestID: requestID,
-			})
-			return
-		}
-
-		httpStatus := runtime.HTTPStatusFromCode(st.Code())
+		httpStatus := httpStatusFromError(err)
 		w.WriteHeader(httpStatus)
 
-		resp := coreErrors.ErrorResponse{
-			Code:      string(coreErrors.CodeFromGRPC(err)),
-			Message:   st.Message(),
-			RequestID: requestID,
-			Details:   coreErrors.DetailsFromGRPC(err),
-		}
+		_ = json.NewEncoder(w).Encode(coreErrors.ErrorResponseFromError(err, requestID))
+	}
+}
 
-		_ = json.NewEncoder(w).Encode(resp)
+func httpStatusFromError(err error) int {
+	st, ok := status.FromError(err)
+	if ok {
+		return runtime.HTTPStatusFromCode(st.Code())
+	}
+
+	if resp := coreErrors.ErrorResponseFromError(err, ""); resp.Code != "" {
+		return runtime.HTTPStatusFromCode(grpcStatusCodeFromCoreCode(coreErrors.Code(resp.Code)))
+	}
+
+	return http.StatusInternalServerError
+}
+
+func grpcStatusCodeFromCoreCode(code coreErrors.Code) codes.Code {
+	switch code {
+	case coreErrors.CodeInvalidRequest:
+		return codes.InvalidArgument
+	case coreErrors.CodeUnauthorized, coreErrors.CodeSessionExpired:
+		return codes.Unauthenticated
+	case coreErrors.CodeForbidden:
+		return codes.PermissionDenied
+	case coreErrors.CodeNotFound:
+		return codes.NotFound
+	case coreErrors.CodeServiceUnavailable:
+		return codes.Unavailable
+	default:
+		return codes.Internal
 	}
 }

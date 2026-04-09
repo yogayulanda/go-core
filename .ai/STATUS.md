@@ -14,15 +14,16 @@
 - `strengthen_bootstrap_templates`
 - `improve_runtime_orchestration`
 - `align_transport_contracts`
-
-## Pending
-
+- `improve_messaging_outbox_runtime`
+- `refresh_examples_suite`
 - `improve_cache_layer`
 - `harden_error_contracts`
 - `improve_security_observability`
 - `improve_migration_adoption`
 - `improve_resilience_contracts`
-- `refresh_examples_suite`
+
+## Pending
+
 - `align_scripts_and_gates`
 - `define_versioning_upgrade_discipline`
 

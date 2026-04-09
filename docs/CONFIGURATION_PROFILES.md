@@ -58,6 +58,14 @@ Enable per dependency:
 - Memcached: `MEMCACHED_*`
 - Kafka: `KAFKA_*`
 
+Cache notes:
+
+- `REDIS_ENABLED=true` means Redis is part of the chosen runtime dependency set
+- `MEMCACHED_ENABLED=true` means Memcached is part of the chosen runtime dependency set
+- enabled caches fail fast during startup if the dependency is unavailable
+- enabled caches are treated as required by `/ready`
+- Memcached readiness intentionally treats cache miss as healthy so the probe stays lightweight and deterministic
+
 ## 7. Auth Profile
 
 Enable internal JWT verification only when required:

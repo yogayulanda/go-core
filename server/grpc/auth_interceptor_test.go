@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/yogayulanda/go-core/config"
+	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/security"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -36,6 +37,9 @@ func TestAuthInterceptor_IncludeMethod_RequiresToken(t *testing.T) {
 		t.Fatalf("handler must not be called for missing token on protected method")
 	}
 	assertCode(t, err, codes.Unauthenticated)
+	if status.Convert(err).Message() != "unauthorized request" {
+		t.Fatalf("expected sanitized auth error message, got %q", status.Convert(err).Message())
+	}
 }
 
 func TestAuthInterceptor_IncludeMethod_WithValidToken_PassesAndInjectsClaims(t *testing.T) {
@@ -117,8 +121,80 @@ func TestAuthInterceptor_ExcludeMethod_BypassOnlyExcluded(t *testing.T) {
 	assertCode(t, err, codes.Unauthenticated)
 }
 
+func TestAuthInterceptor_MetadataMode_InjectsClaimsAndLogsSummary(t *testing.T) {
+	log := &captureAuthLogger{}
+	md := metadata.Pairs(
+		"x-subject", "user-1",
+		"x-session-id", "sess-1",
+		"x-role", "admin",
+		"x-claim-tenant", "acme",
+	)
+
+	called, err, claims := invokeAuthInterceptorWithLogger(
+		&security.InternalJWTVerifier{},
+		log,
+		"/history.v1.HistoryService/GetUserHistory",
+		md,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called || claims == nil {
+		t.Fatalf("expected claims to be injected in metadata mode")
+	}
+	if len(log.serviceLogs) == 0 {
+		t.Fatalf("expected auth service log")
+	}
+	entry := log.serviceLogs[len(log.serviceLogs)-1]
+	if entry.Operation != "auth_request" || entry.Status != "success" {
+		t.Fatalf("unexpected auth log: %+v", entry)
+	}
+}
+
+func TestAuthInterceptor_InvalidToken_LogsFailureAndSanitizesClientError(t *testing.T) {
+	verifier, _ := newVerifierAndToken(t, config.InternalJWTConfig{
+		Enabled:  true,
+		Issuer:   "issuer-test",
+		Audience: "aud-test",
+		Leeway:   30 * time.Second,
+	})
+
+	log := &captureAuthLogger{}
+	md := metadata.Pairs("authorization", "Bearer invalid-token")
+
+	called, err, _ := invokeAuthInterceptorWithLogger(
+		verifier,
+		log,
+		"/history.v1.HistoryService/GetUserHistory",
+		md,
+	)
+	if called {
+		t.Fatalf("handler should not be called")
+	}
+	assertCode(t, err, codes.Unauthenticated)
+	if status.Convert(err).Message() != "unauthorized request" {
+		t.Fatalf("expected sanitized auth error message, got %q", status.Convert(err).Message())
+	}
+	if len(log.serviceLogs) == 0 {
+		t.Fatalf("expected auth failure log")
+	}
+	entry := log.serviceLogs[len(log.serviceLogs)-1]
+	if entry.ErrorCode != "invalid_token" {
+		t.Fatalf("expected invalid_token error code, got %+v", entry)
+	}
+}
+
 func invokeAuthInterceptor(
 	verifier *security.InternalJWTVerifier,
+	fullMethod string,
+	md metadata.MD,
+) (called bool, err error, claims *security.Claims) {
+	return invokeAuthInterceptorWithLogger(verifier, nil, fullMethod, md)
+}
+
+func invokeAuthInterceptorWithLogger(
+	verifier *security.InternalJWTVerifier,
+	log logger.Logger,
 	fullMethod string,
 	md metadata.MD,
 ) (called bool, err error, claims *security.Claims) {
@@ -127,7 +203,7 @@ func invokeAuthInterceptor(
 		ctx = metadata.NewIncomingContext(ctx, md)
 	}
 
-	_, err = authInterceptor(verifier)(
+	_, err = authInterceptorWithLogger(verifier, log)(
 		ctx,
 		"struct{}{}",
 		&grpc.UnaryServerInfo{FullMethod: fullMethod},
@@ -186,4 +262,20 @@ func assertCode(t *testing.T, err error, expected codes.Code) {
 	if st.Code() != expected {
 		t.Fatalf("expected grpc code %v, got %v", expected, st.Code())
 	}
+}
+
+type captureAuthLogger struct {
+	serviceLogs []logger.ServiceLog
+}
+
+func (l *captureAuthLogger) Info(context.Context, string, ...logger.Field)         {}
+func (l *captureAuthLogger) Error(context.Context, string, ...logger.Field)        {}
+func (l *captureAuthLogger) Debug(context.Context, string, ...logger.Field)        {}
+func (l *captureAuthLogger) Warn(context.Context, string, ...logger.Field)         {}
+func (l *captureAuthLogger) LogDB(context.Context, logger.DBLog)                   {}
+func (l *captureAuthLogger) LogEvent(context.Context, logger.EventLog)             {}
+func (l *captureAuthLogger) LogTransaction(context.Context, logger.TransactionLog) {}
+func (l *captureAuthLogger) WithComponent(string) logger.Logger                    { return l }
+func (l *captureAuthLogger) LogService(_ context.Context, s logger.ServiceLog) {
+	l.serviceLogs = append(l.serviceLogs, s)
 }

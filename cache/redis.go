@@ -6,27 +6,49 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/yogayulanda/go-core/config"
+	"github.com/yogayulanda/go-core/logger"
 )
 
 type redisClient struct {
-	client *redis.Client
+	client redisBackend
 }
 
-func NewRedisFromConfig(cfg config.RedisConfig) (Cache, error) {
+type redisBackend interface {
+	Get(ctx context.Context, key string) *redis.StringCmd
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	Del(ctx context.Context, keys ...string) *redis.IntCmd
+	Ping(ctx context.Context) *redis.StatusCmd
+	Close() error
+}
 
-	rdb := redis.NewClient(&redis.Options{
+var newRedisBackend = func(cfg config.RedisConfig) redisBackend {
+	return redis.NewClient(&redis.Options{
 		Addr:     cfg.Address,
 		Password: cfg.Password,
 		DB:       cfg.DB,
 	})
+}
+
+func NewRedisFromConfig(cfg config.RedisConfig, log logger.Logger) (Cache, error) {
+	startedAt := time.Now()
+	rdb := newRedisBackend(cfg)
 
 	// Ping untuk fail-fast
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
+		logConnect(ctx, log, "redis", startedAt, "failed", "ping_failed", map[string]interface{}{
+			"address": cfg.Address,
+			"db":      cfg.DB,
+		})
 		return nil, err
 	}
+
+	logConnect(ctx, log, "redis", startedAt, "success", "", map[string]interface{}{
+		"address": cfg.Address,
+		"db":      cfg.DB,
+	})
 
 	return &redisClient{client: rdb}, nil
 }

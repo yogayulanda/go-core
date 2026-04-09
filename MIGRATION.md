@@ -126,3 +126,26 @@ Now:
   - `OTEL_EXPORTER_OTLP_INSECURE=true`
 - For custom CA, set:
   - `OTEL_EXPORTER_OTLP_CA_CERT_FILE=/path/to/ca.pem`
+
+## 11) Migration autorun now has an additive logger-aware variant
+
+Existing explicit startup migration remains valid:
+
+```go
+if err := migration.AutoRunUp(cfg); err != nil {
+    return err
+}
+```
+
+You may now opt into runtime signals without changing migration ownership:
+
+```go
+if err := migration.AutoRunUpWithLogger(cfg, application.Logger()); err != nil {
+    return err
+}
+```
+
+Behavior notes:
+- startup migration remains explicit and service-owned
+- lock safety semantics are unchanged
+- logger-aware autorun emits `migration_autorun` and `migration_lock` `ServiceLog`

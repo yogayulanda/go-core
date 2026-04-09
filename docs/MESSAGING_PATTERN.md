@@ -15,6 +15,7 @@ Recommended ownership:
 - service decides topic and key
 - service decides retry and DLQ policy through publisher options
 - publisher lifecycle stays explicit through `app.NewKafkaPublisher(...)`
+- app-level helper now injects foundation logger + messaging metrics defaults automatically
 
 ## When To Use Outbox
 
@@ -39,10 +40,36 @@ The consuming service owns:
 
 - when the worker starts
 - what interval and batch size are used
-- what publisher and logger are attached
+- what publisher, logger, and metrics are attached
 - whether the worker runs in the current process topology
 
 This keeps runtime behavior explicit and service-controlled.
+
+Recommended runtime hooks:
+
+- use `outbox.Worker.StartChecked(ctx)` for service-owned background execution
+- use `outbox.Worker.RunOnce(ctx)` for tests, admin jobs, or explicit single-batch control
+
+## Runtime Observability
+
+Publisher emits:
+
+- `message_publish` via `logger.ServiceLog`
+- `app_message_publish_total{service,topic,status}`
+
+Consumer emits:
+
+- `message_consume` via `logger.ServiceLog`
+- `app_message_consume_total{service,topic,group,status}`
+- `app_message_process_duration_seconds{service,topic,group}`
+
+Outbox worker emits:
+
+- `outbox_worker` via `logger.ServiceLog`
+- `outbox_batch` via `logger.ServiceLog`
+- `app_outbox_batch_total{service,status}`
+- `app_outbox_batch_duration_seconds{service}`
+- `app_outbox_batch_size{service}`
 
 ## Retry, DLQ, and Success Logging
 
@@ -55,4 +82,5 @@ Recommended baseline:
 ## See Also
 
 - `examples/outbox_example.go`
+- `examples/bootstrap_example.go`
 - `docs/TRANSACTION_RULES.md`

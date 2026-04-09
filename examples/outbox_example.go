@@ -3,10 +3,13 @@ package examples
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/yogayulanda/go-core/dbtx"
+	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/messaging"
 	"github.com/yogayulanda/go-core/messaging/outbox"
+	"github.com/yogayulanda/go-core/observability"
 )
 
 // WriteRecordAndQueueEventExample shows the recommended pattern:
@@ -36,4 +39,26 @@ func WriteRecordAndQueueEventExample(
 			Headers: map[string]string{"content-type": "application/json"},
 		})
 	})
+}
+
+// StartOutboxWorkerExample shows explicit service-owned worker startup.
+func StartOutboxWorkerExample(
+	ctx context.Context,
+	db *sql.DB,
+	pub messaging.Publisher,
+	log logger.Logger,
+	metrics *observability.Metrics,
+	serviceName string,
+) error {
+	worker := outbox.NewWorkerWithOptions(
+		db,
+		pub,
+		log,
+		outbox.WithWorkerDriver("mysql"),
+		outbox.WithWorkerBatchSize(50),
+		outbox.WithWorkerInterval(2*time.Second),
+		outbox.WithWorkerMetrics(metrics, serviceName),
+	)
+
+	return worker.StartChecked(ctx)
 }

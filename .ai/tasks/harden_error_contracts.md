@@ -1,4 +1,4 @@
-Status: pending
+Status: done
 
 Task: harden error contracts
 
@@ -32,3 +32,10 @@ Expected Output:
 - tighter REST/gRPC error consistency
 - clearer tests for mapping behavior
 - docs that reflect the actual service-facing contract
+
+Implemented Notes:
+
+- `errors/` now owns the canonical public error response mapping for direct app errors and gRPC transport errors
+- gRPC mapping preserves stable contract codes, including `SESSION_EXPIRED`, through `ErrorInfo.reason`
+- gateway error responses now reuse canonical error mapping and sanitize unknown transport errors
+- tests cover stable code round-trip, validation detail exposure, and gateway compact response behavior

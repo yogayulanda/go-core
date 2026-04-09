@@ -65,12 +65,13 @@ func New(application *app.App) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("init auth verifier failed: %w", err)
 	}
+	logAuthConfig(context.Background(), log, authVerifier)
 
 	serverOpts := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(
 			recoveryInterceptor(log),
 			requestIDInterceptor(),
-			authInterceptor(authVerifier),
+			authInterceptorWithLogger(authVerifier, log),
 			loggingInterceptor(application),
 			metricsInterceptor(application),
 		),
