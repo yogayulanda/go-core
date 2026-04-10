@@ -19,6 +19,8 @@ Recently completed:
 
 ## P3
 
+Recently completed:
+
 - script and quality gate alignment
 - versioning and upgrade discipline
 - cleanup of legacy `.ai` tasks that no longer reflect the latest repo direction

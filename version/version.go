@@ -4,10 +4,10 @@ import "encoding/json"
 
 // These variables are intended to be overridden at build time using -ldflags.
 // Example:
-//   go build -ldflags "-X 'go-core/version.Version=1.0.0' -X 'go-core/version.Commit=$(git rev-parse HEAD)' -X 'go-core/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" ./...
+//   go build -ldflags "-X 'github.com/yogayulanda/go-core/version.Version=1.0.0' -X 'github.com/yogayulanda/go-core/version.Commit=$(git rev-parse HEAD)' -X 'github.com/yogayulanda/go-core/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" ./...
 
 var (
-	Version   = "dev"
+	Version   = "1.0.0"
 	Commit    = "unknown"
 	BuildDate = "unknown"
 )

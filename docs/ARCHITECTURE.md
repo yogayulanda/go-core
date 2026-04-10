@@ -1,5 +1,7 @@
 # Architecture
 
+This document describes the stable `v1` architecture shape and runtime composition model.
+
 ## Shape
 - Core contracts:
   config, lifecycle, error, messaging interfaces, and selected platform-standard technical contracts.

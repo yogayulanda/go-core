@@ -1,5 +1,7 @@
 # Observability
 
+This document describes the stable `v1` observability baseline for `go-core`.
+
 Logs:
 - structured keys
 - include `request_id`

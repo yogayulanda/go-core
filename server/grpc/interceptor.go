@@ -144,10 +144,6 @@ func metricsInterceptor(app *app.App) grpc.UnaryServerInterceptor {
 	}
 }
 
-func authInterceptor(verifier *security.InternalJWTVerifier) grpc.UnaryServerInterceptor {
-	return authInterceptorWithLogger(verifier, nil)
-}
-
 func authInterceptorWithLogger(verifier *security.InternalJWTVerifier, log logger.Logger) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,

@@ -1,10 +1,16 @@
 # Production Sign-Off
 
 This document defines release gates before production deploy.
+For `v1.0.0`, these gates finalize the first stable compatibility baseline for `go-core`.
 
 Before running the gates below, review:
 - `docs/CHANGE_CHECKLIST.md`
+- `docs/VERSIONING.md`
 - `MIGRATION.md` when public behavior changed
+
+Gate policy:
+- CI baseline is the fast repository gate and should stay aligned with `.github/workflows/ci.yml`
+- local/staging release validation is intentionally stronger than CI
 
 ## 1) Quality Gate (mandatory)
 
@@ -22,7 +28,7 @@ Pass criteria:
 - `golangci-lint run -E gosec --tests=false` passes
 
 CI baseline:
-- `.github/workflows/ci.yml` runs `go test ./...`, `go vet ./...`, and `golangci-lint run` on push and pull request
+- `.github/workflows/ci.yml` runs `make test`, `make vet`, and `make lint` on push and pull request
 - local `make quality-gate` remains the stronger release gate because it also includes race testing and `gosec`
 
 ## 2) Smoke Gate (mandatory, staging)
@@ -37,6 +43,7 @@ Pass criteria:
 - `/health` returns 200
 - `/ready` returns 200
 - `/version` returns 200
+- `/version` matches the injected `version`, `commit`, and `build_date` for the release candidate
 
 ## 3) Performance Gate (mandatory, staging)
 
@@ -93,6 +100,7 @@ Attach:
 - command outputs
 - dashboard screenshots (latency, errors, resource)
 - failure drill timestamps and outcomes
+- release metadata (`version`, `commit`, `build_date`)
 - rollback readiness confirmation
 
 Only deploy when all sections are marked `PASS`.

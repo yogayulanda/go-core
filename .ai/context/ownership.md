@@ -20,14 +20,14 @@ Code Ownership Map
 - `version/*`
 - `docs/*`
 
-`go-core` must not encode:
+Boundary exclusions:
 
 - service-specific DB aliases
 - business workflow semantics
 - product-specific field contracts
 - generic utilities better housed in `utils-shared`
 
-Allowed exception:
+Allowed shared technical exception:
 
 - selected platform-standard technical contracts intentionally shared across services, such as transaction observability
 

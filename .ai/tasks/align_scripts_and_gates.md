@@ -1,4 +1,4 @@
-Status: pending
+Status: done
 
 Task: align scripts and quality gates
 
@@ -32,3 +32,5 @@ Expected Output:
 
 - more coherent local and CI quality workflow
 - docs and scripts that describe the same expectations
+- CI baseline explicitly mapped to Makefile targets
+- release evidence and sign-off docs aligned with the same gate model

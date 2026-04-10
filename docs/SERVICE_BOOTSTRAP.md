@@ -1,6 +1,7 @@
 # Service Bootstrap
 
 Use this as the canonical onboarding path for a new service consuming `go-core`.
+For stable `v1` adoption, this is the default bootstrap flow unless a service has an explicit reason to diverge.
 
 ## Golden Path
 
@@ -19,6 +20,8 @@ Use this as the canonical onboarding path for a new service consuming `go-core`.
 - Use `logger.DBLog` when DB interaction needs structured operational/query logging.
 - Keep optional infra explicit:
   Redis, Memcached, Kafka, migration, and transaction logging are opt-in by the consuming service.
+- Keep runtime ownership explicit:
+  outbox workers, startup migration, and optional infra startup remain service-owned decisions.
 - If Kafka is enabled, prefer `application.NewKafkaPublisher(...)` and `application.NewKafkaConsumer(...)` so logger and metrics defaults are wired automatically.
 - If using outbox, keep worker startup explicit through `StartChecked(ctx)` and use `RunOnce(ctx)` for deterministic tests or service-controlled batch execution.
 - Use `server.LogStartupReadiness(...)` if startup readiness logs are needed.
@@ -45,6 +48,8 @@ Only services that belong to the transaction-oriented class should use:
 Other services should stay on the generic logging and request metrics baseline unless a separate platform-standard contract is defined.
 
 ## Runtime and Transport Behavior
+
+These runtime and transport signals are part of the stable `v1` baseline contract for adopters and operators.
 
 - `app.New(...)` emits `app_init`.
 - `app.Start(...)` emits `app_runtime` start and shutdown-request signals.

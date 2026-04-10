@@ -1,6 +1,7 @@
 # Change Checklist
 
 Use this checklist before merging changes that affect `go-core` as a foundation repo.
+Starting at `v1.0.0`, use it as the release-discipline checklist for semver-governed changes.
 
 ## Public Contract Change
 
@@ -9,6 +10,7 @@ Use this checklist before merging changes that affect `go-core` as a foundation 
 - [ ] `.ai/` context and tasks updated
 - [ ] tests updated
 - [ ] `MIGRATION.md` updated when upgrade behavior changes
+- [ ] release version impact reviewed against `docs/VERSIONING.md`
 
 ## Runtime Change
 
@@ -22,3 +24,9 @@ Use this checklist before merging changes that affect `go-core` as a foundation 
 - [ ] examples/templates still reflect the golden path
 - [ ] service-facing behavior stays understandable for new adopters
 - [ ] versioning or upgrade note added if needed
+
+## Release Metadata
+
+- [ ] release build injects `version.Version`
+- [ ] release build injects `version.Commit`
+- [ ] release build injects `version.BuildDate`

@@ -8,6 +8,25 @@ Module path:
 
 `github.com/yogayulanda/go-core`
 
+### Release and upgrade discipline
+
+`go-core` is released as stable `v1.0.0` for Go services.
+`v1.0.0` is the first compatibility baseline for semver-governed adoption.
+Release discipline is intentionally simple:
+
+- CI baseline is the fast repository gate: `make test`, `make vet`, `make lint`
+- local release gate is stronger: `make quality-gate`
+- staging release validation uses `make smoke-gate`, load gates, and `make failure-drill`
+- public contract changes must update README, relevant docs, tests, and `MIGRATION.md` when upgrade behavior changes
+- release builds should set `version.Version`, `version.Commit`, and `version.BuildDate` via `-ldflags`
+
+See:
+
+- `docs/PRODUCTION_SIGNOFF.md`
+- `docs/CHANGE_CHECKLIST.md`
+- `docs/VERSIONING.md`
+- `MIGRATION.md`
+
 ### Foundation boundary
 
 `go-core` has two allowed contract classes:

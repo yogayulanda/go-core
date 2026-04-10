@@ -49,9 +49,9 @@ Current approved generic logging contracts:
 - `logger.Logger.LogDB(...)`
 
 ## Current Stage
-- Primary consumer today is `transaction-history-service`.
-- Broad backward compatibility is not yet the top constraint.
-- Still avoid careless churn in exported behavior unless the foundation becomes cleaner or safer.
+- `go-core` is in the stable `v1.0.0` stage.
+- Documented public behavior should be treated as a compatibility contract.
+- Changes should prefer additive evolution; breaking changes require explicit major-version intent and migration guidance.
 
 ## Technical Baseline
 - target Go version: `1.24`

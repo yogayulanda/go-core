@@ -316,28 +316,6 @@ func (f *fakeLogger) LogTransaction(ctx context.Context, tx logger.TransactionLo
 
 func (f *fakeLogger) WithComponent(component string) logger.Logger { return f }
 
-func (f *fakeLogger) containsInfo(msg string) bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for _, got := range f.infoLogs {
-		if got == msg {
-			return true
-		}
-	}
-	return false
-}
-
-func (f *fakeLogger) containsWarn(msg string) bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	for _, got := range f.warnLogs {
-		if got == msg {
-			return true
-		}
-	}
-	return false
-}
-
 func (f *fakeLogger) countWarn() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()

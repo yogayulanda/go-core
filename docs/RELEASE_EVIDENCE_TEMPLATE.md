@@ -8,6 +8,7 @@
 ## Quality Gate
 
 - [ ] `make quality-gate` PASS
+- [ ] CI baseline (`make test`, `make vet`, `make lint`) PASS
 - [ ] `docs/CHANGE_CHECKLIST.md` reviewed
 - Notes:
 
@@ -16,6 +17,7 @@
 - [ ] `/health` PASS
 - [ ] `/ready` PASS
 - [ ] `/version` PASS
+- [ ] `/version` matches injected `version`, `commit`, and `build_date`
 - Base URL:
 - Notes:
 
@@ -59,5 +61,9 @@
 ## Final Decision
 
 - [ ] APPROVED FOR PRODUCTION
+- Release version:
+- Release commit:
+- Build date:
+- Version endpoint evidence:
 - Approver:
 - Date:

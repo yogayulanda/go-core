@@ -13,6 +13,7 @@ import (
 
 	"github.com/yogayulanda/go-core/app"
 	"github.com/yogayulanda/go-core/config"
+	"github.com/yogayulanda/go-core/version"
 )
 
 func TestReadyEndpoint_ReadyJSON(t *testing.T) {
@@ -133,6 +134,19 @@ func TestHealthEndpoint_OK(t *testing.T) {
 }
 
 func TestVersionEndpoint_JSON(t *testing.T) {
+	origVersion := version.Version
+	origCommit := version.Commit
+	origBuildDate := version.BuildDate
+	defer func() {
+		version.Version = origVersion
+		version.Commit = origCommit
+		version.BuildDate = origBuildDate
+	}()
+
+	version.Version = "1.0.0"
+	version.Commit = "deadbeef"
+	version.BuildDate = "2026-04-10T00:00:00Z"
+
 	mux := runtime.NewServeMux()
 	if err := registerVersionEndpoint(mux); err != nil {
 		t.Fatalf("register version endpoint failed: %v", err)
@@ -153,10 +167,14 @@ func TestVersionEndpoint_JSON(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("invalid json response: %v", err)
 	}
-	for _, key := range []string{"version", "commit", "build_date"} {
-		if _, ok := payload[key]; !ok {
-			t.Fatalf("missing key: %s", key)
-		}
+	if got := payload["version"]; got != version.Version {
+		t.Fatalf("unexpected version: %v", got)
+	}
+	if got := payload["commit"]; got != version.Commit {
+		t.Fatalf("unexpected commit: %v", got)
+	}
+	if got := payload["build_date"]; got != version.BuildDate {
+		t.Fatalf("unexpected build_date: %v", got)
 	}
 }
 

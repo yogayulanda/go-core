@@ -1,12 +1,10 @@
 Current Improvement Roadmap
 
-Priority order:
+Current stabilization follow-through:
 
-1. strengthen bootstrap examples and starter templates
-2. formalize messaging and outbox service patterns
-3. raise observability contracts for service and DB flows
-4. improve config ergonomics and structured validation
-5. strengthen CI, release, and adoption workflow
+1. keep CI, scripts, and release docs aligned
+2. keep versioning and upgrade expectations explicit
+3. keep `.ai` context synchronized with repo reality
 
 Current decisions:
 

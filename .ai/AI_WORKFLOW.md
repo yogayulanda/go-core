@@ -3,6 +3,7 @@
 ## Overview
 
 This repository uses an AI workflow to help maintain `go-core` as a reusable infrastructure foundation.
+The repository is now in stable `v1.0.0`, so automated changes must treat documented public behavior as a compatibility contract.
 
 The workflow exists to keep changes:
 
@@ -30,7 +31,7 @@ Task Layer
    |
    v
 Context Layer
-(.ai/context)
+(.ai/context.md, .ai/architecture.md, .ai/workflow.md, .ai/context/*)
    |
    v
 AI Model
@@ -71,7 +72,7 @@ AI Model
 - prefer safe evolution
 - allow bounded refactors when they improve the framework shape
 - avoid hidden side effects
-- preserve exported behavior when reasonable, but broad backward compatibility is not yet the top constraint
+- preserve documented exported behavior and treat semver compatibility as the default
 - keep defaults generic
 - keep service-specific semantics out of framework code and docs
 - keep generic utilities out of `go-core`

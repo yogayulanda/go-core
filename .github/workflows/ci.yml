@@ -4,7 +4,10 @@ on:
   push:
     branches:
       - "**"
+    tags:
+      - "v*"
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test-and-lint:
@@ -21,12 +24,10 @@ jobs:
           cache: true
 
       - name: Run tests
-        run: go test ./...
+        run: make test
 
       - name: Run vet
-        run: go vet ./...
+        run: make vet
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.64.8
+        run: make lint

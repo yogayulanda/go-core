@@ -21,11 +21,13 @@
 - `improve_security_observability`
 - `improve_migration_adoption`
 - `improve_resilience_contracts`
+- `align_scripts_and_gates`
+- `define_versioning_upgrade_discipline`
+- `cleanup_ai_source_of_truth`
 
 ## Pending
 
-- `align_scripts_and_gates`
-- `define_versioning_upgrade_discipline`
+- none
 
 ## Superseded
 

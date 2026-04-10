@@ -1,6 +1,22 @@
 # Migration Guide
 
-This file lists breaking API changes made in the latest cleanup pass.
+This file tracks consumer-visible upgrade changes for `go-core`.
+Starting at `v1.0.0`, it is the canonical upgrade note for semver-governed releases.
+
+Add an entry here when a change affects how a consuming service upgrades, including:
+
+- exported API changes
+- config or env contract changes
+- runtime behavior changes that require service adjustment
+- transport/auth/error behavior changes visible to consumers
+- observability contract changes that affect dashboards or alerts
+
+Do not add entries for internal-only cleanup with no upgrade impact.
+
+## v1 baseline
+
+`v1.0.0` is the first stable compatibility baseline for downstream adopters.
+Entries below capture consumer-visible changes that landed before the first stable tag and therefore define the upgrade surface into `v1`.
 
 ## 1) `app.New` now requires context
 

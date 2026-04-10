@@ -13,7 +13,13 @@ Unlike service repositories, `go-core` is a reusable framework/library. AI conte
 
 Primary lens
 
-Read `.ai/go-core.md` first. It defines the highest-priority framing for AI work in this repository.
+Read these canonical entrypoints first:
+
+- `.ai/context.md`
+- `.ai/architecture.md`
+- `.ai/workflow.md`
+
+Then use `.ai/go-core.md` and `.ai/context/*` as supporting detail.
 
 Repository positioning
 
@@ -26,9 +32,11 @@ Repository positioning
 
 Folder Structure
 
+`.ai/context.md`, `.ai/architecture.md`, `.ai/workflow.md`
+Contain the stable v1 source-of-truth context for automated work.
+
 `.ai/context`
-Contains framework context, architecture rules, ownership boundaries, and repository map.
-It also contains the current roadmap and prioritized backlog for `forge`.
+Contains supporting framework context, ownership boundaries, and repository maps.
 
 `.ai/prompts`
 Defines AI roles for planning, execution, fixes, tests, and review.

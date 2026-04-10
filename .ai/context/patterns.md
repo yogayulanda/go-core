@@ -24,11 +24,8 @@ Testing:
 - verify config, runtime, and docs stay aligned
 - cover success and failure paths for exported behavior
 
-Boundary:
+Documentation patterns:
 
-- business behavior belongs in consuming services
-- generic helper code belongs in `utils-shared`
-- `go-core` should keep framework-level composition and technical contracts
-- approved platform-standard technical contracts should state their target service class explicitly
-- use `ServiceLog` for normal service flow, `DBLog` for database operations, and `TransactionLog` only for transaction-oriented services
 - examples and templates should reflect the golden path, not just isolated snippets
+- docs should describe explicit ownership for optional runtime components
+- platform-standard technical contracts should state their target service class explicitly
