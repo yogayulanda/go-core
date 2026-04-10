@@ -65,9 +65,11 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 
 	httpServer := &http.Server{
 		Addr: fmt.Sprintf(":%d", cfg.HTTP.Port),
-		Handler: withHTTPMetrics(
-			application,
-			withHTTPRequestID(mux),
+		Handler: withCORS(
+			withHTTPMetrics(
+				application,
+				withHTTPRequestID(mux),
+			),
 		),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 15 * time.Second,
