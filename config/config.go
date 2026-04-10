@@ -77,10 +77,11 @@ type GRPCConfig struct {
 }
 
 type HTTPConfig struct {
-	Port        int
-	TLSEnabled  bool
-	TLSCertFile string
-	TLSKeyFile  string
+	Port         int
+	TLSEnabled   bool
+	TLSCertFile  string
+	TLSKeyFile   string
+	PprofEnabled bool
 }
 
 type ObservabilityConfig struct {

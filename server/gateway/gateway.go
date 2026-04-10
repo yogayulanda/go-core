@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/yogayulanda/go-core/app"
 	"github.com/yogayulanda/go-core/logger"
@@ -62,15 +63,22 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 	if err := registerMetricsEndpoint(mux); err != nil {
 		return nil, fmt.Errorf("failed to register metrics endpoint: %w", err)
 	}
+	if cfg.HTTP.PprofEnabled {
+		if err := registerPprofEndpoints(mux); err != nil {
+			return nil, fmt.Errorf("failed to register pprof endpoints: %w", err)
+		}
+	}
+
+	var handler http.Handler = mux
+	handler = withHTTPRequestID(handler)
+	handler = withHTTPMetrics(application, handler)
+	handler = withCORS(handler)
+	handler = otelhttp.NewHandler(handler, "http_gateway")
+	handler = withPanicRecovery(application, handler)
 
 	httpServer := &http.Server{
-		Addr: fmt.Sprintf(":%d", cfg.HTTP.Port),
-		Handler: withCORS(
-			withHTTPMetrics(
-				application,
-				withHTTPRequestID(mux),
-			),
-		),
+		Addr:         fmt.Sprintf(":%d", cfg.HTTP.Port),
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,

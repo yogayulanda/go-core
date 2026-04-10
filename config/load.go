@@ -50,10 +50,11 @@ func Load(opts ...Option) (*Config, error) {
 			TLSKeyFile:  getString("GRPC_TLS_KEY_FILE", ""),
 		},
 		HTTP: HTTPConfig{
-			Port:        getInt("HTTP_PORT", 8080),
-			TLSEnabled:  getBool("HTTP_TLS_ENABLED", false),
-			TLSCertFile: getString("HTTP_TLS_CERT_FILE", ""),
-			TLSKeyFile:  getString("HTTP_TLS_KEY_FILE", ""),
+			Port:         getInt("HTTP_PORT", 8080),
+			TLSEnabled:   getBool("HTTP_TLS_ENABLED", false),
+			TLSCertFile:  getString("HTTP_TLS_CERT_FILE", ""),
+			TLSKeyFile:   getString("HTTP_TLS_KEY_FILE", ""),
+			PprofEnabled: getBool("HTTP_PPROF_ENABLED", false),
 		},
 		Observability: ObservabilityConfig{
 			OTLPEndpoint:       getString("OTEL_EXPORTER_OTLP_ENDPOINT", ""),

@@ -125,12 +125,13 @@ func (z *zapLogger) buildFields(ctx context.Context, fields ...Field) []zap.Fiel
 		}
 	}
 
-	// Inject trace_id automatically if exists
+	// Inject trace_id and span_id automatically if exists
 	if span := trace.SpanFromContext(ctx); span != nil {
 		sc := span.SpanContext()
 		if sc.IsValid() {
 			zapFields = append(zapFields,
 				zap.String("trace_id", sc.TraceID().String()),
+				zap.String("span_id", sc.SpanID().String()),
 			)
 		}
 	}
