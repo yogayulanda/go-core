@@ -81,6 +81,7 @@ func (v *InternalJWTVerifier) Verify(token string) (*Claims, error) {
 	}
 
 	parser := jwt.NewParser(
+		jwt.WithValidMethods([]string{"RS256", "RS384", "RS512"}),
 		jwt.WithIssuedAt(),
 		jwt.WithLeeway(v.leeway),
 	)

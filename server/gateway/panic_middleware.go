@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/yogayulanda/go-core/app"
@@ -39,7 +38,7 @@ func withPanicRecovery(application *app.App, next http.Handler) http.Handler {
 
 				errResp := coreErrors.ErrorResponse{
 					Code:      string(coreErrors.CodeInternal),
-					Message:   fmt.Sprintf("internal server error"),
+					Message:   "internal server error",
 					RequestID: requestID,
 				}
 				_ = json.NewEncoder(w).Encode(errResp)
