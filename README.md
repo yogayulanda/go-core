@@ -510,6 +510,7 @@ Foundation repo change discipline:
 
 - review `docs/CHANGE_CHECKLIST.md`
 - update `MIGRATION.md` whenever public upgrade behavior changes
+- update `CHANGELOG.md` for each tagged release
 
 ### Production sign-off
 
@@ -552,3 +553,9 @@ go build -ldflags "\
   -X 'github.com/yogayulanda/go-core/version.Commit=$(git rev-parse HEAD)' \
   -X 'github.com/yogayulanda/go-core/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
 ```
+
+### Release notes and changelog
+
+- use GitHub Release for announcement-style release notes
+- use `CHANGELOG.md` for repository version history
+- use `docs/RELEASING.md` for the repeatable release process
