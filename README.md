@@ -71,6 +71,10 @@ They are not a license to move business rules into `go-core`.
   - `GET /ready`
   - `GET /version`
   - `GET /metrics`
+  - `GET /debug/pprof/*` (optional via `HTTP_PPROF_ENABLED`)
+  - HTTP panic recovery
+  - HTTP signature validation (optional via `AUTH_SIGNATURE_ENABLED`)
+  - OpenTelemetry HTTP span wrapper (`otelhttp`)
   - transport-aligned request-id propagation, HTTP metrics, service metrics, and `ServiceLog`
 - Startup helper (`server`):
   - `Run(...)` to orchestrate gRPC + gateway + lifecycle with centralized error handling.
@@ -97,7 +101,7 @@ They are not a license to move business rules into `go-core`.
 - Outbox helpers (`messaging/outbox`) with driver-aware SQL (`mysql|postgres|sqlserver`), `RunOnce(...)`, and explicit `StartChecked(...)`.
 - Goose migration helper (`migration`) including auto-run support.
 - DB transaction helper (`dbtx`) with context propagation (`WithTx`, `WithTxOptions`).
-- Outbound resilience helper (`resilience`) for timeout + retry policy, plus additive retry/timeout hooks for logger-backed observability.
+- Outbound resilience helper (`resilience`) for timeout + retry policy, circuit breaker (`sony/gobreaker`), plus additive retry/timeout hooks for logger-backed observability.
 - Common app error contract + mapper (`errors`) with stable code and optional validation details.
 
 ### Security scope
@@ -109,7 +113,7 @@ They are not a license to move business rules into `go-core`.
   - `x-role`
   - `x-claim-<name>` (mapped into `security.Claims.Attributes`)
 - If `INTERNAL_JWT_ENABLED=true`, go-core enforces bearer JWT verification in gRPC interceptor:
-  - RSA signature validation (`RS256/RS384/RS512`)
+  - RSA signature validation (`RS256/RS384/RS512`) via static key OR dynamic background polled JWKS endpoints
   - standard time claims validation (`exp`, `nbf`, `iat`)
   - optional issuer check (`INTERNAL_JWT_ISSUER`)
   - optional audience check (`INTERNAL_JWT_AUDIENCE`)
@@ -246,12 +250,20 @@ Kafka:
 Auth:
 
 - `INTERNAL_JWT_ENABLED`
-- `INTERNAL_JWT_PUBLIC_KEY`
+- `INTERNAL_JWT_PUBLIC_KEY` (used as static key if JWKS is not configured)
+- `INTERNAL_JWT_JWKS_ENDPOINT` (enables dynamic background JWKS fetching via keyfunc)
+- `INTERNAL_JWT_JWKS_REFRESH_INTERVAL` (default: `1h`)
 - `INTERNAL_JWT_ISSUER`
 - `INTERNAL_JWT_AUDIENCE`
 - `INTERNAL_JWT_LEEWAY` (default: `30s`)
 - `INTERNAL_JWT_INCLUDE_METHODS` (optional, comma-separated gRPC full methods)
 - `INTERNAL_JWT_EXCLUDE_METHODS` (optional, comma-separated gRPC full methods)
+
+- `AUTH_SIGNATURE_ENABLED` (default: `false`, enables HTTP payload signature verification)
+- `AUTH_SIGNATURE_MASTER_KEY` (secret key used for HMAC-SHA256 signature verification)
+- `AUTH_SIGNATURE_HEADER_KEY` (default: `x-signature`)
+- `AUTH_SIGNATURE_TIMESTAMP_KEY` (default: `x-timestamp`)
+- `AUTH_SIGNATURE_MAX_TIME_DRIFT` (default: `5m`, prevents replay attacks)
 
 Method policy notes:
 

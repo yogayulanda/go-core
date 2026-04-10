@@ -31,7 +31,7 @@ Runtime orchestration:
 
 Transport boundary:
 - gRPC wrappers own request ID propagation, auth extraction/verification, request metrics, service metrics, and `grpc_request` service logs
-- HTTP gateway wrappers own request ID propagation, HTTP metrics, service metrics, and `http_request` service logs
+- HTTP gateway wrappers own request ID propagation, HTTP panic recovery, HTTP payload signature validation, HTTP metrics, service metrics, and `http_request` service logs
 - transport wrappers keep external errors compact and internal diagnostics structured
 
 Observability baseline:

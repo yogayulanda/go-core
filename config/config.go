@@ -93,16 +93,27 @@ type ObservabilityConfig struct {
 
 type AuthConfig struct {
 	InternalJWT InternalJWTConfig
+	Signature   SignatureConfig
+}
+
+type SignatureConfig struct {
+	Enabled      bool
+	MasterKey    string
+	HeaderKey    string
+	TimestampKey string
+	MaxTimeDrift time.Duration
 }
 
 type InternalJWTConfig struct {
-	Enabled        bool
-	PublicKey      string
-	Issuer         string
-	Audience       string
-	Leeway         time.Duration
-	IncludeMethods []string
-	ExcludeMethods []string
+	Enabled             bool
+	PublicKey           string
+	JWKSEndpoint        string
+	JWKSRefreshInterval time.Duration
+	Issuer              string
+	Audience            string
+	Leeway              time.Duration
+	IncludeMethods      []string
+	ExcludeMethods      []string
 }
 
 type RedisConfig struct {

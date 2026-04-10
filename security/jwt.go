@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MicahParks/keyfunc/v3"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/yogayulanda/go-core/config"
 )
@@ -23,7 +24,7 @@ var (
 
 type InternalJWTVerifier struct {
 	enabled        bool
-	publicKey      *rsa.PublicKey
+	keyFunc        jwt.Keyfunc
 	issuer         string
 	audience       string
 	leeway         time.Duration
@@ -45,11 +46,24 @@ func NewInternalJWTVerifier(cfg config.InternalJWTConfig) (*InternalJWTVerifier,
 		return verifier, nil
 	}
 
+	if strings.TrimSpace(cfg.JWKSEndpoint) != "" {
+		// v3 keyfunc fetching
+		kf, err := keyfunc.NewDefault([]string{cfg.JWKSEndpoint})
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize JWKS from %s: %w", cfg.JWKSEndpoint, err)
+		}
+		verifier.keyFunc = kf.Keyfunc
+		return verifier, nil
+	}
+
 	key, err := parseRSAPublicKey(cfg.PublicKey)
 	if err != nil {
 		return nil, err
 	}
-	verifier.publicKey = key
+	// Fallback to static public key
+	verifier.keyFunc = func(token *jwt.Token) (interface{}, error) {
+		return key, nil
+	}
 
 	return verifier, nil
 }
@@ -67,15 +81,12 @@ func (v *InternalJWTVerifier) Verify(token string) (*Claims, error) {
 	}
 
 	parser := jwt.NewParser(
-		jwt.WithValidMethods([]string{"RS256", "RS384", "RS512"}),
 		jwt.WithIssuedAt(),
 		jwt.WithLeeway(v.leeway),
 	)
 
 	claims := jwt.MapClaims{}
-	parsed, err := parser.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) {
-		return v.publicKey, nil
-	})
+	parsed, err := parser.ParseWithClaims(token, claims, v.keyFunc)
 	if err != nil || !parsed.Valid {
 		return nil, errInvalidToken
 	}
