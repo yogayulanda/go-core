@@ -1,18 +1,17 @@
 version: v1
 
+# Token-Optimized Configuration:
+# Kami membatasi struktur autoload ini agar tidak menghabiskan jendela token (context window).
+# AI IDE akan mencari dan mengambil sub-dokumen secara otonom (on-demand fetching) 
+# apabila sesi percakapan memang mengarah pada spesifikasi yang dibutuhkan.
+
 context:
+  # Konteks Inti & Arsitektur
   - .ai/context.md
   - .ai/architecture.md
-  - .ai/workflow.md
   - .ai/go-core.md
+
+  # Aturan Hukum (Konstitusi & Kontrak Code)
   - .ai/context/contracts.md
-  - .ai/context/project.md
-  - .ai/context/architecture.md
   - .ai/context/rules.md
   - .ai/context/engineering-rules.md
-  - .ai/context/ownership.md
-  - .ai/context/patterns.md
-  - .ai/context/feature-map.md
-  - .ai/context/repomap.md
-  - .ai/context/file-index.md
-  - .ai/context/symbol-map.md
