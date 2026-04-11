@@ -1,4 +1,4 @@
-package main
+package examples
 
 import (
 	"context"
@@ -11,7 +11,8 @@ import (
 	"github.com/yogayulanda/go-core/logger"
 )
 
-func main() {
+// HttpClientExample shows how to use the resilient httpclient package.
+func HttpClientExample() {
 	// 1. Initialize Logger
 	// In a real go-core service, this is usually part of the application bootstrap
 	l, err := logger.New("example-service", "debug")

@@ -5,6 +5,7 @@ modify only necessary files
 do not rename public interfaces without strong reason
 
 keep docs, tests, and code aligned
+Implementation is considered 'done' only when all unit tests (`go test ./...`) pass.
 keep versioning and migration notes aligned with public contract changes
 
 prefer minimal surface-area changes
