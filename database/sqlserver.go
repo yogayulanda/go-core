@@ -8,13 +8,17 @@ import (
 
 	"github.com/yogayulanda/go-core/config"
 	"github.com/yogayulanda/go-core/logger"
+	"gorm.io/driver/sqlserver"
+	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
 
 type DB struct {
 	*sql.DB
+	gorm *gorm.DB
 }
 
-// New initializes database connection pool.
+// New initializes database connection pool and GORM instance.
 func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
 	startedAt := time.Now()
 
@@ -57,6 +61,19 @@ func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	// Initialize GORM
+	gormDB, err := gorm.Open(sqlserver.New(sqlserver.Config{
+		Conn: db,
+	}), &gorm.Config{
+		PrepareStmt: true,
+		NamingStrategy: schema.NamingStrategy{
+			SingularTable: true,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize gorm: %w", err)
+	}
+
 	log.LogDB(ctx, logger.DBLog{
 		Operation:  "connect",
 		DBName:     cfg.Name,
@@ -66,12 +83,16 @@ func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
 			"driver":             cfg.Driver,
 			"max_open_conns":     cfg.MaxOpenConns,
 			"max_idle_conns":     cfg.MaxIdleConns,
-			"conn_max_idle_time": cfg.ConnMaxIdleTime.String(),
-			"conn_max_lifetime":  cfg.ConnMaxLifetime.String(),
+			"gorm_initialized":   true,
 		},
 	})
 
-	return &DB{DB: db}, nil
+	return &DB{DB: db, gorm: gormDB}, nil
+}
+
+// Gorm returns the pre-initialized GORM DB instance.
+func (d *DB) Gorm() *gorm.DB {
+	return d.gorm
 }
 
 // Health checks DB readiness.
