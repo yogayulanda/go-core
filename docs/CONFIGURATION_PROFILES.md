@@ -55,8 +55,8 @@ Optional tracing and stronger telemetry:
 Enable per dependency:
 
 - Redis: `REDIS_*`
-- Memcached: `MEMCACHED_*`
-- Kafka: `KAFKA_*`
+- Memcached: `MEMCACHED_*` (plus legacy `MEMCACHE_HOST/PORT` fallback)
+- Kafka: `KAFKA_*` (supports SASL Plain and JKS certificates)
 
 Cache notes:
 

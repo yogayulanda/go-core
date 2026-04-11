@@ -5,7 +5,7 @@ This document describes the stable `v1` architecture shape and runtime compositi
 ## Shape
 - Core contracts:
   config, lifecycle, error, messaging interfaces, and selected platform-standard technical contracts.
-- Core adapters: DB/cache/kafka/grpc/gateway.
+- Core adapters: DB/cache/kafka/grpc/gateway/httpclient.
 - Service code: domain/usecase/repository/transport.
 
 ## Runtime Path

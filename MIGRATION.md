@@ -165,3 +165,30 @@ Behavior notes:
 - startup migration remains explicit and service-owned
 - lock safety semantics are unchanged
 - logger-aware autorun emits `migration_autorun` and `migration_lock` `ServiceLog`
+
+## 12) Database initialization now includes GORM
+
+`database.New` now returns a wrapper that includes a GORM instance (`*gorm.DB`).
+
+Before:
+- Only raw `*sql.DB` was supported.
+
+Now:
+```go
+db, err := database.New(cfg, log)
+gormInstance := db.Gorm() // Access the pre-initialized GORM DB
+```
+
+GORM is initialized with `PrepareStmt: true` and `SingularTable: true` by default.
+
+## 13) Enhanced Kafka configuration for SASL/JKS support
+
+Kafka configuration has been expanded to support SASL Plain authentication and JKS certificates.
+
+New environment variables:
+- `KAFKA_USERNAME`
+- `KAFKA_PASSWORD`
+- `KAFKA_JKS_FILE`
+- `KAFKA_JKS_PASSWORD`
+
+These are optional and only used when `KAFKA_ENABLED=true`.

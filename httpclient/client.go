@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/resilience"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.uber.org/zap"
 )
 
 // Client is a wrapper around resty.Client that provides tracing, logging, and resilience.
@@ -18,10 +16,11 @@ type Client struct {
 	client *resty.Client
 	cb     *resilience.CircuitBreaker
 	opts   ClientOptions
+	log    logger.Logger
 }
 
 // NewClient initializes a new HTTP client with the provided options.
-func NewClient(options ...Option) *Client {
+func NewClient(log logger.Logger, options ...Option) *Client {
 	opts := DefaultClientOptions()
 	for _, opt := range options {
 		opt(&opts)
@@ -60,10 +59,14 @@ func NewClient(options ...Option) *Client {
 			reqCtx = context.Background()
 		}
 
-		logger.ServiceLog(reqCtx, "httpclient_request",
-			zap.String("method", req.Method),
-			zap.String("url", req.URL),
-		)
+		log.LogService(reqCtx, logger.ServiceLog{
+			Operation: "httpclient_request",
+			Status:    "started",
+			Metadata: map[string]interface{}{
+				"method": req.Method,
+				"url":    req.URL,
+			},
+		})
 		return nil
 	})
 
@@ -73,12 +76,16 @@ func NewClient(options ...Option) *Client {
 			reqCtx = context.Background()
 		}
 
-		logger.ServiceLog(reqCtx, "httpclient_response",
-			zap.String("method", resp.Request.Method),
-			zap.String("url", resp.Request.URL),
-			zap.Int("status_code", resp.StatusCode()),
-			zap.Duration("duration", resp.Time()),
-		)
+		log.LogService(reqCtx, logger.ServiceLog{
+			Operation:  "httpclient_response",
+			Status:     "success",
+			DurationMs: resp.Time().Milliseconds(),
+			Metadata: map[string]interface{}{
+				"method":      resp.Request.Method,
+				"url":         resp.Request.URL,
+				"status_code": resp.StatusCode(),
+			},
+		})
 		return nil
 	})
 
@@ -91,6 +98,7 @@ func NewClient(options ...Option) *Client {
 		client: restyClient,
 		cb:     cb,
 		opts:   opts,
+		log:    log,
 	}
 }
 

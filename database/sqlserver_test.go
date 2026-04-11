@@ -37,6 +37,7 @@ func TestNew_SQLMock_Success(t *testing.T) {
 	defer rawDB.Close()
 
 	mock.ExpectPing()
+	mock.ExpectPing()
 
 	log, err := logger.New("db-test", "error")
 	if err != nil {
@@ -73,6 +74,7 @@ func TestNew_UsesConfiguredConnMaxIdleTime(t *testing.T) {
 	}
 	defer rawDB.Close()
 
+	mock.ExpectPing()
 	mock.ExpectPing()
 
 	log, err := logger.New("db-test", "error")

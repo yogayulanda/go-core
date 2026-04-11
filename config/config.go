@@ -130,7 +130,11 @@ type MemcachedConfig struct {
 }
 
 type KafkaConfig struct {
-	Enabled  bool
-	Brokers  []string
-	ClientID string
+	Enabled     bool
+	Brokers     []string
+	ClientID    string
+	Username    string
+	Password    string
+	JksFile     string
+	JksPassword string
 }

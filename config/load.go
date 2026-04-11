@@ -90,9 +90,13 @@ func Load(opts ...Option) (*Config, error) {
 		},
 		Memcached: loadMemcachedConfig(),
 		Kafka: KafkaConfig{
-			Enabled:  getBool("KAFKA_ENABLED", false),
-			Brokers:  getStringSlice("KAFKA_BROKERS"),
-			ClientID: getString("KAFKA_CLIENT_ID", ""),
+			Enabled:     getBool("KAFKA_ENABLED", false),
+			Brokers:     getStringSlice("KAFKA_BROKERS"),
+			ClientID:    getString("KAFKA_CLIENT_ID", ""),
+			Username:    getString("KAFKA_USERNAME", ""),
+			Password:    getString("KAFKA_PASSWORD", ""),
+			JksFile:     getString("KAFKA_JKS_FILE", ""),
+			JksPassword: getString("KAFKA_JKS_PASSWORD", ""),
 		},
 	}
 
@@ -102,8 +106,11 @@ func Load(opts ...Option) (*Config, error) {
 func loadMemcachedConfig() MemcachedConfig {
 	servers := getStringSlice("MEMCACHED_SERVERS")
 	if len(servers) == 0 {
-		if single := strings.TrimSpace(getString("MEMCACHED_ADDRESS", "")); single != "" {
-			servers = []string{single}
+		if address := getString("MEMCACHED_ADDRESS", ""); address != "" {
+			servers = []string{address}
+		} else if host := getString("MEMCACHE_HOST", ""); host != "" {
+			port := getString("MEMCACHE_PORT", "11211")
+			servers = []string{fmt.Sprintf("%s:%s", host, port)}
 		}
 	}
 

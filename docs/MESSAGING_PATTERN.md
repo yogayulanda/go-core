@@ -16,6 +16,7 @@ Recommended ownership:
 - service decides retry and DLQ policy through publisher options
 - publisher lifecycle stays explicit through `app.NewKafkaPublisher(...)`
 - app-level helper now injects foundation logger + messaging metrics defaults automatically
+- supports SASL Plain authentication and JKS certificates via configuration
 
 ## When To Use Outbox
 

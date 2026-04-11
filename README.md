@@ -57,7 +57,7 @@ They are not a license to move business rules into `go-core`.
   - `ServiceLog` for normal technical service flow.
   - `DBLog` for DB operational and query-related logging.
   - optional `TransactionLog` for transaction-oriented service monitoring.
-- Multi-database initialization (`database`) with named DB map.
+- Multi-database initialization (`database`) with named DB map and GORM support.
 - Optional Redis cache dependency initialization (`cache/redis`) with fail-fast startup ping and aligned `cache_connect` `ServiceLog`.
 - Optional Memcached cache dependency initialization (`cache/memcached`) with fail-fast health check, miss-tolerant readiness probe, and aligned `cache_connect` `ServiceLog`.
 - gRPC server wrapper + interceptors (`server/grpc`):
@@ -102,6 +102,11 @@ They are not a license to move business rules into `go-core`.
 - Goose migration helper (`migration`) including auto-run support.
 - DB transaction helper (`dbtx`) with context propagation (`WithTx`, `WithTxOptions`).
 - Outbound resilience helper (`resilience`) for timeout + retry policy, circuit breaker (`sony/gobreaker`), plus additive retry/timeout hooks for logger-backed observability.
+- Resilient HTTP client (`httpclient`) with built-in:
+  - circuit breaker
+  - retries with backoff
+  - OpenTelemetry tracing
+  - structured logging (`ServiceLog`)
 - Common app error contract + mapper (`errors`) with stable code and optional validation details.
 
 ### Security scope
@@ -231,7 +236,9 @@ Memcached:
 
 - `MEMCACHED_ENABLED` (default: `false`)
 - `MEMCACHED_SERVERS` (comma-separated, required if enabled)
-- `MEMCACHED_ADDRESS` (single address fallback, optional alternative to `MEMCACHED_SERVERS`)
+- `MEMCACHED_ADDRESS` (single address fallback, optional)
+- `MEMCACHE_HOST` (legacy host fallback, default: empty)
+- `MEMCACHE_PORT` (legacy port fallback, default: `11211`)
 - `MEMCACHED_TIMEOUT` (default: `2s`)
 
 Behavior:
@@ -246,6 +253,10 @@ Kafka:
 - `KAFKA_ENABLED` (default: `false`)
 - `KAFKA_BROKERS` (required if enabled; comma-separated)
 - `KAFKA_CLIENT_ID`
+- `KAFKA_USERNAME` (SASL Plain username)
+- `KAFKA_PASSWORD` (SASL Plain password)
+- `KAFKA_JKS_FILE` (Path to JKS certificate file)
+- `KAFKA_JKS_PASSWORD` (Password for JKS file)
 
 Auth:
 

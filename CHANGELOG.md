@@ -7,6 +7,17 @@ This changelog complements:
 - `MIGRATION.md` for consumer-visible upgrade guidance
 - `docs/RELEASING.md` for the release process
 
+## [1.1.0] - Unreleased
+
+### Added
+- Resilient `httpclient` package with retries and circuit breaker.
+- GORM support in `database` package for SQL Server.
+- SASL Plain and JKS certificate support in Kafka configuration.
+- Legacy `MEMCACHE_HOST` and `MEMCACHE_PORT` fallback support in Memcached configuration.
+
+### Changed
+- Improved `database.New` to initialize a GORM instance by default.
+
 ## [1.0.0] - 2026-04-10
 
 ### Added

@@ -1,6 +1,8 @@
 package logger
 
-import "context"
+import (
+	"context"
+)
 
 // Logger is the main structured application logger.
 //
