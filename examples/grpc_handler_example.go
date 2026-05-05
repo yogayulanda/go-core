@@ -32,7 +32,13 @@ func (h *RecordGRPCHandler) CreateRecord(ctx context.Context, req *CreateRecordR
 	// Transport-level request ID, metrics, and structured request logging
 	// are provided by go-core gRPC interceptors, not by handler code.
 	if req == nil {
-		return nil, coreerrors.ToGRPC(coreerrors.Validation("invalid request", coreerrors.Detail{Field: "request", Reason: "required"}))
+		err := coreerrors.Build("EXM", coreerrors.CategoryVAL, "001").
+			Message("invalid request").
+			UserMessage("Permintaan tidak valid").
+			Finality(coreerrors.FinalityBusiness).
+			Details(coreerrors.Detail{Field: "request", Reason: "required"}).
+			Done()
+		return nil, coreerrors.ToGRPC(err)
 	}
 
 	id, err := h.uc.Create(ctx, CreateRecordInput{

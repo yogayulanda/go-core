@@ -31,13 +31,28 @@ func NewRecordService(repo RecordRepository, log logger.Logger) *RecordService {
 func (s *RecordService) Create(ctx context.Context, in CreateRecordInput) (string, error) {
 	startedAt := time.Now()
 	if strings.TrimSpace(in.SubjectID) == "" {
-		return "", coreerrors.Validation("invalid request", coreerrors.Detail{Field: "subject_id", Reason: "required"})
+		return "", coreerrors.Build("EXM", coreerrors.CategoryVAL, "101").
+			Message("invalid request").
+			UserMessage("Subject ID diperlukan").
+			Finality(coreerrors.FinalityBusiness).
+			Details(coreerrors.Detail{Field: "subject_id", Reason: "required"}).
+			Done()
 	}
 	if strings.TrimSpace(in.ReferenceID) == "" {
-		return "", coreerrors.Validation("invalid request", coreerrors.Detail{Field: "reference_id", Reason: "required"})
+		return "", coreerrors.Build("EXM", coreerrors.CategoryVAL, "102").
+			Message("invalid request").
+			UserMessage("Reference ID diperlukan").
+			Finality(coreerrors.FinalityBusiness).
+			Details(coreerrors.Detail{Field: "reference_id", Reason: "required"}).
+			Done()
 	}
 	if in.Amount <= 0 {
-		return "", coreerrors.Validation("invalid request", coreerrors.Detail{Field: "amount", Reason: "must be > 0"})
+		return "", coreerrors.Build("EXM", coreerrors.CategoryVAL, "103").
+			Message("invalid request").
+			UserMessage("Amount harus lebih besar dari 0").
+			Finality(coreerrors.FinalityBusiness).
+			Details(coreerrors.Detail{Field: "amount", Reason: "must be > 0"}).
+			Done()
 	}
 
 	id, err := s.repo.Create(ctx, in)
@@ -54,7 +69,12 @@ func (s *RecordService) Create(ctx context.Context, in CreateRecordInput) (strin
 				},
 			})
 		}
-		return "", coreerrors.Wrap(coreerrors.CodeInternal, "create record failed", err)
+		return "", coreerrors.Build("EXM", coreerrors.CategoryDB, "001").
+			Message("create record failed: " + err.Error()).
+			UserMessage("Terjadi kesalahan saat memproses data.").
+			Finality(coreerrors.FinalityTechnicalRecoverable).
+			Retryable(true).
+			Done()
 	}
 
 	if s.log != nil {
