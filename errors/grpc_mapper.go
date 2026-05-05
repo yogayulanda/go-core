@@ -197,10 +197,6 @@ func DetailsFromGRPC(err error) []Detail {
 	return out
 }
 
-func hasCoreErrorInfo(err error) bool {
-	_, _, _, _, _, isCore := ErrorInfoFromGRPC(err)
-	return isCore
-}
 
 func normalizeDetails(in []Detail) []Detail {
 	if len(in) == 0 {
