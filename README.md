@@ -350,6 +350,22 @@ Notes:
 - HTTP Gateway extracts `trace_id` automatically from OTEL trace span, and `transaction_id` from observability context.
 - Unknown external `ErrorInfo.reason` values are sanitized and fallback to gRPC status mapping.
 
+#### Building Application Errors
+
+Downstream services should build errors using the `ErrorBuilder` to ensure correct taxonomy and categorization:
+
+```go
+import coreErrors "github.com/yogayulanda/go-core/errors"
+
+var ErrInvalidAccount = coreErrors.Build("TRF", coreErrors.CategoryVAL, "001").
+	Message("dest_account_number length is strictly 10 digits"). // Technical log
+	UserMessage("Nomor rekening tujuan tidak valid.").             // Safe for frontend
+	Finality(coreErrors.FinalityBusiness).                       // E.g., Business, TechnicalRecoverable
+	Done()
+```
+
+Categories: `VAL` (Validation), `AUTH` (Auth), `SES` (Session), `SWI` (Switch/Partner), `DB` (Database), `REC` (Recoverable/Technical).
+
 ### Readiness behavior
 
 `GET /ready` returns JSON with per-component checks.
