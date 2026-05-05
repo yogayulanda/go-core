@@ -14,7 +14,7 @@ func withPanicRecovery(application *app.App, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		requestID := observability.GetRequestID(ctx)
-		
+
 		defer func() {
 			if rec := recover(); rec != nil {
 				// Log the panic with stack trace and standard schema
@@ -37,9 +37,9 @@ func withPanicRecovery(application *app.App, next http.Handler) http.Handler {
 				w.WriteHeader(http.StatusInternalServerError)
 
 				errResp := coreErrors.ErrorResponse{
-					Code:      string(coreErrors.CodeInternal),
-					Message:   "internal server error",
-					RequestID: requestID,
+					Code:    string(coreErrors.CodeInternal),
+					Message: "internal server error",
+					TraceID: requestID,
 				}
 				_ = json.NewEncoder(w).Encode(errResp)
 			}

@@ -27,7 +27,7 @@ type CircuitBreakerOptions struct {
 func DefaultCircuitBreakerOptions(name string) CircuitBreakerOptions {
 	return CircuitBreakerOptions{
 		Name:        name,
-		MaxRequests: 1,               // Requests allowed in half-open state
+		MaxRequests: 1,                // Requests allowed in half-open state
 		Interval:    time.Duration(0), // Never clear counts if 0
 		Timeout:     60 * time.Second, // Time sitting in open before half-open transition
 		ReadyToTrip: func(counts gobreaker.Counts) bool {

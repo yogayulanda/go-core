@@ -8,12 +8,12 @@ import (
 
 // ClientOptions holds the configuration for the HTTP Client.
 type ClientOptions struct {
-	Timeout          time.Duration
-	RetryOptions     *resilience.RetryOptions
-	CircuitBreaker   *resilience.CircuitBreakerOptions
-	Debug            bool
-	UserAgent        string
-	EnableTracing    bool
+	Timeout        time.Duration
+	RetryOptions   *resilience.RetryOptions
+	CircuitBreaker *resilience.CircuitBreakerOptions
+	Debug          bool
+	UserAgent      string
+	EnableTracing  bool
 }
 
 // DefaultClientOptions provides sensible defaults for the HTTP client.

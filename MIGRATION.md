@@ -192,3 +192,25 @@ New environment variables:
 - `KAFKA_JKS_PASSWORD`
 
 These are optional and only used when `KAFKA_ENABLED=true`.
+
+## 14) Error Contract Standardization
+
+The `errors` package now enforces a strict `<DOMAIN>-<CATEGORY>-<NUMBER>` formatting logic with explicit `Finality`. 
+
+`AppError` and the HTTP `ErrorResponse` have been refactored:
+- `RequestID` was removed from the HTTP payload, replaced by `TraceID` and `TransactionID`.
+- `Success: false` is now explicitly added to the JSON response.
+- `Category` now uses strict acronyms (`VAL`, `AUTH`, `SES`, `SWI`, `DB`, `REC`).
+- Downstream services should use `errors.Build(domain, category, number)` to craft errors.
+
+### AppError Migration Table
+
+| v1 AppError | v2 AppError (Dynamic Builder) |
+| --- | --- |
+| `errors.Validation(msg, details)` | `errors.Build(domain, CategoryVAL, num).Message(msg).Details(details...).Done()` |
+| `errors.New(CodeUnauthorized, msg)` | `errors.Build(domain, CategoryAUTH, num).Message(msg).Done()` |
+| `errors.New(CodeNotFound, msg)` | `errors.Build(domain, CategoryDB, num).Message(msg).Done()` |
+| `errors.New(CodeServiceUnavailable, msg)` | `errors.Build(domain, CategorySWI, num).Message(msg).Retryable(true).Done()` |
+| `errors.New(CodeInternal, msg)` | `errors.Build(domain, CategoryREC, num).Message(msg).Done()` |
+
+*Note: For `v2`, you must provide the `domain` (e.g., `TRF`, `AUTH`) and `number` (e.g., `001`) from your bounded context's error catalog.*

@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/yogayulanda/go-core/observability"
-	"go.opentelemetry.io/otel/trace"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

@@ -51,9 +51,9 @@ func withSignatureValidation(application *app.App, next http.Handler) http.Handl
 			w.WriteHeader(http.StatusUnauthorized)
 
 			errResp := coreErrors.ErrorResponse{
-				Code:      string(coreErrors.CodeUnauthorized),
-				Message:   "unauthorized request",
-				RequestID: requestID,
+				Code:    string(coreErrors.CodeUnauthorized),
+				Message: "unauthorized request",
+				TraceID: requestID,
 			}
 			_ = json.NewEncoder(w).Encode(errResp)
 		}

@@ -325,13 +325,17 @@ KAFKA_ENABLED=false
 
 ### Error response contract
 
-HTTP error response (gateway) is kept compact:
+HTTP error response (gateway) is kept strictly structured and standardized:
 
 ```json
 {
-  "code": "INVALID_REQUEST",
+  "success": false,
+  "code": "TRF-VAL-001",
   "message": "invalid request",
-  "request_id": "req-123",
+  "user_message": "User friendly message",
+  "trace_id": "req-123",
+  "transaction_id": "tx-123",
+  "timestamp": "2026-05-05T17:00:00Z",
   "details": [
     {"field": "user_id", "reason": "required"}
   ]
@@ -341,11 +345,10 @@ HTTP error response (gateway) is kept compact:
 Notes:
 
 - `details` is optional, typically used for validation errors.
-- Internal classification such as error category is kept in logs, not exposed in API response.
-- gRPC mapper keeps stable error code via `ErrorInfo.reason`.
-- `SESSION_EXPIRED` remains a stable contract code even though it shares gRPC `Unauthenticated` with `UNAUTHORIZED`.
+- The `code` uses a strict `<DOMAIN>-<CATEGORY>-<NUMBER>` formatting logic.
+- gRPC mapper automatically packs extended attributes (`domain`, `user_message`, `retryable`, `finality`) into the `ErrorInfo.Metadata`.
+- HTTP Gateway extracts `trace_id` automatically from OTEL trace span, and `transaction_id` from observability context.
 - Unknown external `ErrorInfo.reason` values are sanitized and fallback to gRPC status mapping.
-- Gateway JSON responses are built from the same canonical contract and sanitize unknown transport errors.
 
 ### Readiness behavior
 

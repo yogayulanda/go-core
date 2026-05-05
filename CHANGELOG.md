@@ -38,3 +38,12 @@ This changelog complements:
 ### Notes
 - `v1.0.0` is the first stable compatibility baseline for downstream adopters
 - future consumer-visible changes should update both this changelog and `MIGRATION.md` when upgrade behavior changes
+
+### Added
+- Error classification enums and formatting in `errors` package (`Finality`, `Category`, `Domain`).
+- Standardized logging keys in `logger` package (`FieldCustomerID`, `FieldIdempotencyKey`, etc.) and zap injection for `transaction_id`.
+
+### Changed
+- `errors.AppError` and `ErrorResponse` updated to the new standard 9-field shape.
+- gRPC mapper now automatically packs and unpacks extended metadata.
+- HTTP Gateway error handler grabs `trace_id` and `transaction_id` from observability context.

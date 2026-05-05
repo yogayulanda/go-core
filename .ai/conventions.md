@@ -44,8 +44,10 @@ return fmt.Errorf("repo.Save: %w", err)
 return status.Error(codes.Internal, err.Error()) // raw internals leak!
 ```
 
-- Always use `errors.AppError` as the canonical error type for application-facing errors
-- Wrap internal errors with `fmt.Errorf("...: %w", err)` for traceability
+- Always use `errors.AppError` built with `errors.Build(domain, category, number)` for application-facing errors
+- Downstream services must inject their bounded context domain prefix (e.g., TRF, PPOB) without modifying go-core
+- Internal errors wrapped with `fmt.Errorf("...: %w", err)` for traceability
+- The HTTP Gateway automatically pulls trace_id and transaction_id for edge responses
 - Internal error detail stays in logs — **never** in API responses
 - `unknown errors` (non-AppError) must be mapped to `INTERNAL_ERROR`
 

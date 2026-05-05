@@ -80,10 +80,10 @@ func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
 		Status:     "success",
 		DurationMs: time.Since(startedAt).Milliseconds(),
 		Metadata: map[string]interface{}{
-			"driver":             cfg.Driver,
-			"max_open_conns":     cfg.MaxOpenConns,
-			"max_idle_conns":     cfg.MaxIdleConns,
-			"gorm_initialized":   true,
+			"driver":           cfg.Driver,
+			"max_open_conns":   cfg.MaxOpenConns,
+			"max_idle_conns":   cfg.MaxIdleConns,
+			"gorm_initialized": true,
 		},
 	})
 

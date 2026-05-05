@@ -61,6 +61,15 @@ func TestCustomErrorHandler_ValidationError_CompactBodyWithDetails(t *testing.T)
 	if len(body.Details) != 1 {
 		t.Fatalf("expected 1 detail, got %d", len(body.Details))
 	}
+	if body.Success != false {
+		t.Fatalf("expected success: false")
+	}
+	if body.TraceID != "req-123" {
+		t.Fatalf("expected trace_id req-123, got %s", body.TraceID)
+	}
+	if body.Timestamp == "" {
+		t.Fatalf("expected timestamp, got empty")
+	}
 }
 
 func TestCustomErrorHandler_UnknownGRPCError_IsSanitized(t *testing.T) {

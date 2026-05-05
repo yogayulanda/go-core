@@ -3,11 +3,16 @@ package errors
 import "strings"
 
 type AppError struct {
-	Code     Code
-	Message  string
-	Category Category
-	Details  []Detail
-	Err      error // internal error (not exposed)
+	Code        Code
+	Message     string
+	UserMessage string
+	Category    Category
+	Finality    Finality
+	Retryable   bool
+	Details     []Detail
+	Domain      string
+	Number      string
+	Err         error // internal error (not exposed)
 }
 
 type Detail struct {
@@ -15,18 +20,15 @@ type Detail struct {
 	Reason string `json:"reason"`
 }
 
-type Category string
-
-const (
-	CategoryValidation Category = "validation"
-	CategoryAuth       Category = "auth"
-	CategoryBusiness   Category = "business"
-	CategoryPartner    Category = "partner"
-	CategoryInternal   Category = "internal"
-)
+func (e *AppError) FormatCode() string {
+	if e.Domain != "" && e.Category != "" && e.Number != "" {
+		return e.Domain + "-" + string(e.Category) + "-" + e.Number
+	}
+	return string(e.Code)
+}
 
 func (e *AppError) Error() string {
-	return string(e.Code) + ": " + e.Message
+	return e.FormatCode() + ": " + e.Message
 }
 
 func (e *AppError) Unwrap() error {
@@ -41,6 +43,7 @@ func New(code Code, message string) *AppError {
 		Code:     code,
 		Message:  safeMessage(code, message),
 		Category: defaultCategory(code),
+		Finality: defaultFinality(code),
 	}
 }
 
@@ -49,6 +52,7 @@ func Wrap(code Code, message string, err error) *AppError {
 		Code:     code,
 		Message:  safeMessage(code, message),
 		Category: defaultCategory(code),
+		Finality: defaultFinality(code),
 		Err:      err,
 	}
 }
@@ -57,7 +61,8 @@ func Validation(message string, details ...Detail) *AppError {
 	return &AppError{
 		Code:     CodeInvalidRequest,
 		Message:  safeMessage(CodeInvalidRequest, message),
-		Category: CategoryValidation,
+		Category: CategoryVAL,
+		Finality: FinalityBusiness,
 		Details:  details,
 	}
 }
@@ -92,14 +97,88 @@ func defaultMessage(code Code) string {
 func defaultCategory(code Code) Category {
 	switch code {
 	case CodeInvalidRequest:
-		return CategoryValidation
+		return CategoryVAL
 	case CodeUnauthorized, CodeForbidden, CodeSessionExpired:
-		return CategoryAuth
+		return CategoryAUTH
 	case CodeNotFound:
-		return CategoryBusiness
+		return CategoryDB // or Business depending on context, using DB as fallback
 	case CodeServiceUnavailable:
-		return CategoryPartner
+		return CategorySWI
 	default:
-		return CategoryInternal
+		return CategoryREC
 	}
+}
+
+func defaultFinality(code Code) Finality {
+	switch code {
+	case CodeInvalidRequest, CodeUnauthorized, CodeForbidden, CodeNotFound, CodeSessionExpired:
+		return FinalityBusiness
+	case CodeServiceUnavailable:
+		return FinalityTechnicalRecoverable
+	case CodeInternal:
+		return FinalityTechnicalNonRecoverable
+	default:
+		return FinalityAmbiguous
+	}
+}
+
+// ErrorBuilder provides a fluent API to build dynamic AppErrors
+type ErrorBuilder struct {
+	err *AppError
+}
+
+func Build(domain string, category Category, number string) *ErrorBuilder {
+	return &ErrorBuilder{
+		err: &AppError{
+			Domain:   domain,
+			Category: category,
+			Number:   number,
+		},
+	}
+}
+
+func (b *ErrorBuilder) Message(msg string) *ErrorBuilder {
+	b.err.Message = msg
+	return b
+}
+
+func (b *ErrorBuilder) UserMessage(msg string) *ErrorBuilder {
+	b.err.UserMessage = msg
+	return b
+}
+
+func (b *ErrorBuilder) Finality(f Finality) *ErrorBuilder {
+	b.err.Finality = f
+	return b
+}
+
+func (b *ErrorBuilder) Retryable(r bool) *ErrorBuilder {
+	b.err.Retryable = r
+	return b
+}
+
+func (b *ErrorBuilder) Code(c Code) *ErrorBuilder {
+	b.err.Code = c
+	return b
+}
+
+func (b *ErrorBuilder) Details(details ...Detail) *ErrorBuilder {
+	b.err.Details = append(b.err.Details, details...)
+	return b
+}
+
+func (b *ErrorBuilder) Err(err error) *ErrorBuilder {
+	b.err.Err = err
+	return b
+}
+
+func (b *ErrorBuilder) Done() *AppError {
+	if b.err.Code == "" {
+		b.err.Code = CodeInternal
+	}
+	b.err.Message = safeMessage(b.err.Code, b.err.Message)
+	if b.err.Finality == "" {
+		b.err.Finality = defaultFinality(b.err.Code)
+	}
+	return b.err
 }

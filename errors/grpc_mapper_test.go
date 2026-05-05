@@ -165,7 +165,7 @@ func TestToGRPC_WrappedAppError_UsesWrappedCode(t *testing.T) {
 }
 
 func TestErrorResponseFromError_DirectAppError(t *testing.T) {
-	resp := ErrorResponseFromError(Validation("invalid request", Detail{Field: "user_id", Reason: "required"}), "req-1")
+	resp := ErrorResponseFromError(Validation("invalid request", Detail{Field: "user_id", Reason: "required"}), "req-1", "tx-1")
 
 	if resp.Code != string(CodeInvalidRequest) {
 		t.Fatalf("unexpected code: %s", resp.Code)
@@ -173,8 +173,8 @@ func TestErrorResponseFromError_DirectAppError(t *testing.T) {
 	if resp.Message != "invalid request" {
 		t.Fatalf("unexpected message: %s", resp.Message)
 	}
-	if resp.RequestID != "req-1" {
-		t.Fatalf("unexpected request_id: %s", resp.RequestID)
+	if resp.TraceID != "req-1" {
+		t.Fatalf("unexpected trace_id: %s", resp.TraceID)
 	}
 	if len(resp.Details) != 1 {
 		t.Fatalf("expected 1 detail, got %d", len(resp.Details))
@@ -182,7 +182,7 @@ func TestErrorResponseFromError_DirectAppError(t *testing.T) {
 }
 
 func TestErrorResponseFromError_GRPCInternalWithoutCoreInfo_IsSanitized(t *testing.T) {
-	resp := ErrorResponseFromError(status.Error(codes.Internal, "raw database panic"), "req-2")
+	resp := ErrorResponseFromError(status.Error(codes.Internal, "raw database panic"), "req-2", "tx-2")
 
 	if resp.Code != string(CodeInternal) {
 		t.Fatalf("unexpected code: %s", resp.Code)
@@ -197,7 +197,7 @@ func TestErrorResponseFromError_GRPCInternalWithoutCoreInfo_IsSanitized(t *testi
 
 func TestErrorResponseFromError_GRPCValidationWithCoreInfo_UsesDetails(t *testing.T) {
 	err := ToGRPC(Validation("invalid request", Detail{Field: "amount", Reason: "must be > 0"}))
-	resp := ErrorResponseFromError(err, "req-3")
+	resp := ErrorResponseFromError(err, "req-3", "tx-3")
 
 	if resp.Code != string(CodeInvalidRequest) {
 		t.Fatalf("unexpected code: %s", resp.Code)
@@ -207,5 +207,36 @@ func TestErrorResponseFromError_GRPCValidationWithCoreInfo_UsesDetails(t *testin
 	}
 	if len(resp.Details) != 1 {
 		t.Fatalf("expected 1 detail, got %d", len(resp.Details))
+	}
+}
+
+func TestToGRPC_RoundtripCustomFields(t *testing.T) {
+	err := Build("TRF", CategoryVAL, "123").
+		Message("internal").
+		UserMessage("user friendly").
+		Retryable(true).
+		Finality(FinalityTechnicalRecoverable).
+		Done()
+
+	grpcErr := ToGRPC(err)
+	_, domain, category, number, userMessage, isCore := ErrorInfoFromGRPC(grpcErr)
+
+	if !isCore {
+		t.Fatalf("expected core error")
+	}
+	if domain != "TRF" {
+		t.Fatalf("domain mismatch")
+	}
+	if category != string(CategoryVAL) {
+		t.Fatalf("category mismatch")
+	}
+	if number != "123" {
+		t.Fatalf("number mismatch")
+	}
+	if userMessage != "user friendly" {
+		t.Fatalf("userMessage mismatch")
+	}
+	if RetryableFromGRPC(grpcErr) != true {
+		t.Fatalf("retryable mismatch")
 	}
 }

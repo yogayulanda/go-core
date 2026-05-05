@@ -2,6 +2,7 @@ package errors
 
 import (
 	stderrors "errors"
+	"strconv"
 	"strings"
 
 	errdetails "google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -26,9 +27,22 @@ func ToGRPC(err error) error {
 
 	st := status.New(grpcCodeFor(code), message)
 
+	domain := appErr.Domain
+	if domain == "" {
+		domain = errorInfoDomain
+	}
+
 	stWithInfo, detailErr := st.WithDetails(&errdetails.ErrorInfo{
 		Reason: string(code),
-		Domain: errorInfoDomain,
+		Domain: domain,
+		Metadata: map[string]string{
+			"category":     string(appErr.Category),
+			"number":       appErr.Number,
+			"user_message": appErr.UserMessage,
+			"retryable":    strconv.FormatBool(appErr.Retryable),
+			"finality":     string(appErr.Finality),
+			"core_error":   "true",
+		},
 	})
 	if detailErr == nil {
 		st = stWithInfo
@@ -54,19 +68,22 @@ func ToGRPC(err error) error {
 	return st.Err()
 }
 
-func ErrorResponseFromError(err error, requestID string) ErrorResponse {
-	code, message, details := publicErrorContract(err)
+func ErrorResponseFromError(err error, traceID string, txID string) ErrorResponse {
+	codeStr, message, userMessage, details := publicErrorContract(err)
 	return ErrorResponse{
-		Code:      string(code),
-		Message:   message,
-		RequestID: strings.TrimSpace(requestID),
-		Details:   details,
+		Success:       false,
+		Code:          codeStr,
+		Message:       message,
+		UserMessage:   userMessage,
+		TraceID:       traceID,
+		TransactionID: txID,
+		Details:       details,
 	}
 }
 
-func publicErrorContract(err error) (Code, string, []Detail) {
+func publicErrorContract(err error) (string, string, string, []Detail) {
 	if err == nil {
-		return CodeInternal, defaultMessage(CodeInternal), nil
+		return string(CodeInternal), defaultMessage(CodeInternal), "", nil
 	}
 
 	var appErr *AppError
@@ -74,43 +91,85 @@ func publicErrorContract(err error) (Code, string, []Detail) {
 		code := normalizeCode(string(appErr.Code))
 		message := safeMessage(code, appErr.Message)
 		if code != CodeInvalidRequest {
-			return code, message, nil
+			return appErr.FormatCode(), message, appErr.UserMessage, nil
 		}
-		return code, message, normalizeDetails(appErr.Details)
+		return appErr.FormatCode(), message, appErr.UserMessage, normalizeDetails(appErr.Details)
 	}
 
 	st, ok := status.FromError(err)
 	if !ok {
-		return CodeInternal, defaultMessage(CodeInternal), nil
+		return string(CodeInternal), defaultMessage(CodeInternal), "", nil
 	}
 
-	code := CodeFromGRPC(err)
-	if !hasCoreErrorInfo(err) {
-		return code, defaultMessage(code), nil
+	code, domain, category, number, userMessage, isCore := ErrorInfoFromGRPC(err)
+	if !isCore {
+		return string(code), defaultMessage(code), "", nil
 	}
 
 	message := safeMessage(code, st.Message())
-	if code != CodeInvalidRequest {
-		return code, message, nil
+
+	formattedCode := string(code)
+	if domain != "" && category != "" && number != "" {
+		formattedCode = domain + "-" + category + "-" + number
+	} else if domain != errorInfoDomain && domain != "" {
+		formattedCode = domain + "-" + string(code)
 	}
-	return code, message, normalizeDetails(DetailsFromGRPC(err))
+
+	if code != CodeInvalidRequest {
+		return formattedCode, message, userMessage, nil
+	}
+	return formattedCode, message, userMessage, normalizeDetails(DetailsFromGRPC(err))
 }
 
 func CodeFromGRPC(err error) Code {
+	code, _, _, _, _, _ := ErrorInfoFromGRPC(err)
+	return code
+}
+
+func ErrorInfoFromGRPC(err error) (Code, string, string, string, string, bool) {
 	st, ok := status.FromError(err)
 	if !ok {
-		return CodeInternal
+		return CodeInternal, "", "", "", "", false
 	}
 
 	for _, d := range st.Details() {
 		if info, ok := d.(*errdetails.ErrorInfo); ok && info != nil {
-			if code := normalizeCode(info.Reason); code != CodeInternal || info.Reason == string(CodeInternal) {
-				return code
+			isCore := info.Domain == errorInfoDomain || info.Metadata["core_error"] == "true"
+			if !isCore {
+				continue
+			}
+			code := normalizeCode(info.Reason)
+			domain := info.Domain
+			if domain == errorInfoDomain {
+				domain = ""
+			}
+			category := info.Metadata["category"]
+			number := info.Metadata["number"]
+			userMessage := info.Metadata["user_message"]
+
+			if code != CodeInternal || info.Reason == string(CodeInternal) {
+				return code, domain, category, number, userMessage, true
 			}
 		}
 	}
 
-	return codeFromGRPCStatus(st.Code())
+	return codeFromGRPCStatus(st.Code()), "", "", "", "", false
+}
+
+func RetryableFromGRPC(err error) bool {
+	st, ok := status.FromError(err)
+	if !ok {
+		return false
+	}
+	for _, d := range st.Details() {
+		if info, ok := d.(*errdetails.ErrorInfo); ok && info != nil {
+			if retryableStr, ok := info.Metadata["retryable"]; ok {
+				retryable, _ := strconv.ParseBool(retryableStr)
+				return retryable
+			}
+		}
+	}
+	return false
 }
 
 func DetailsFromGRPC(err error) []Detail {
@@ -139,20 +198,8 @@ func DetailsFromGRPC(err error) []Detail {
 }
 
 func hasCoreErrorInfo(err error) bool {
-	st, ok := status.FromError(err)
-	if !ok {
-		return false
-	}
-
-	for _, d := range st.Details() {
-		info, ok := d.(*errdetails.ErrorInfo)
-		if !ok || info == nil {
-			continue
-		}
-		return info.Domain == errorInfoDomain && normalizeCode(info.Reason) != CodeInternal || (info.Domain == errorInfoDomain && info.Reason == string(CodeInternal))
-	}
-
-	return false
+	_, _, _, _, _, isCore := ErrorInfoFromGRPC(err)
+	return isCore
 }
 
 func normalizeDetails(in []Detail) []Detail {

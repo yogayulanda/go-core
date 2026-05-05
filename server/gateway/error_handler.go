@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/yogayulanda/go-core/app"
 	"github.com/yogayulanda/go-core/observability"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -31,7 +33,17 @@ func customErrorHandler(app *app.App) runtime.ErrorHandlerFunc {
 		httpStatus := httpStatusFromError(err)
 		w.WriteHeader(httpStatus)
 
-		_ = json.NewEncoder(w).Encode(coreErrors.ErrorResponseFromError(err, requestID))
+		traceID := requestID
+		if span := trace.SpanFromContext(ctx); span != nil && span.SpanContext().IsValid() {
+			traceID = span.SpanContext().TraceID().String()
+		}
+
+		txID := observability.GetTransactionID(ctx)
+
+		resp := coreErrors.ErrorResponseFromError(err, traceID, txID)
+		resp.Timestamp = time.Now().UTC().Format(time.RFC3339)
+
+		_ = json.NewEncoder(w).Encode(resp)
 	}
 }
 
@@ -41,7 +53,7 @@ func httpStatusFromError(err error) int {
 		return runtime.HTTPStatusFromCode(st.Code())
 	}
 
-	if resp := coreErrors.ErrorResponseFromError(err, ""); resp.Code != "" {
+	if resp := coreErrors.ErrorResponseFromError(err, "", ""); resp.Code != "" {
 		return runtime.HTTPStatusFromCode(grpcStatusCodeFromCoreCode(coreErrors.Code(resp.Code)))
 	}
 

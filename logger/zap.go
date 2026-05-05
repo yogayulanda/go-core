@@ -142,6 +142,19 @@ func (z *zapLogger) buildFields(ctx context.Context, fields ...Field) []zap.Fiel
 		}
 	}
 
+	hasTransactionIDField := false
+	for _, f := range fields {
+		if strings.EqualFold(strings.TrimSpace(f.Key), FieldTransactionID) {
+			hasTransactionIDField = true
+			break
+		}
+	}
+	if !hasTransactionIDField {
+		if txID := observability.GetTransactionID(ctx); txID != "" {
+			zapFields = append(zapFields, zap.String(FieldTransactionID, txID))
+		}
+	}
+
 	for _, f := range fields {
 		zapFields = append(zapFields, zap.Any(f.Key, sanitizeFieldValue(f.Key, f.Value)))
 	}

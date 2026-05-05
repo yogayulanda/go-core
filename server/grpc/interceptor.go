@@ -74,7 +74,7 @@ func loggingInterceptor(app *app.App) grpc.UnaryServerInterceptor {
 				err = coreErrors.ToGRPC(appErr)
 			} else {
 				errorCode = string(coreErrors.CodeInternal)
-				errorCategory = string(coreErrors.CategoryInternal)
+				errorCategory = string(coreErrors.CategoryREC)
 				err = coreErrors.ToGRPC(err)
 			}
 		}
