@@ -1,85 +1,53 @@
-AI Development System for `go-core`
+# .ai/ — AI Context for go-core
 
-This repository includes an AI-assisted workflow for planning, implementing, fixing, testing, and reviewing changes in `go-core`.
+This folder contains the structured AI context for all work in the `go-core` repository.
 
-The `.ai` folder is intended to be consumed by `forge`, so prompts and context should optimize for bounded, repository-aware execution.
+## Reading Order
 
-Unlike service repositories, `go-core` is a reusable framework/library. AI context for this repo must preserve:
+Always start here, in order:
 
-- domain-agnostic design
-- framework-oriented boundaries
-- minimal public API growth
-- no product-specific assumptions
+1. **`.ai/context.md`** — project overview, key modules, critical rules
+2. **`.ai/architecture.md`** — system design, layer model, scaling considerations
+3. Continue to the specific file for the area being worked on
 
-Primary lens
+## Navigation by Task Area
 
-Read these canonical entrypoints first:
+| Working on... | Read |
+|---|---|
+| Auth / JWT / security | `.ai/security.md` |
+| DB transactions / idempotency / outbox | `.ai/transactions.md` |
+| Module APIs / symbols / constructors | `.ai/modules.md` |
+| Request flow / observability / logging | `.ai/data-flow.md` |
+| External integrations / env config | `.ai/integrations.md` |
+| Code style / naming / patterns | `.ai/conventions.md` |
+| Why design decisions were made | `.ai/decisions.md` |
+| Dev workflow / acceptance checklist | `.ai/workflow.md` |
 
-- `.ai/context.md`
-- `.ai/architecture.md`
-- `.ai/workflow.md`
+## Folder Structure
 
-Then use `.ai/go-core.md` and `.ai/context/*` as supporting detail.
+```
+.ai/
+├── context.md        ← READ THIS FIRST
+├── architecture.md
+├── security.md
+├── transactions.md
+├── modules.md
+├── data-flow.md
+├── integrations.md
+├── conventions.md
+├── decisions.md
+├── workflow.md
+│
+├── AI_RULES.md       ← Compact rules & review checklist
+├── AI_WORKFLOW.md    ← Ownership principles & prompt roles
+├── STATUS.md         ← Task progress tracking
+├── config.yaml       ← AI context file index
+│
+├── prompts/          ← Ready-to-use prompt templates (8 files)
+└── tasks/            ← Task definitions for bounded changes
+```
 
-Repository positioning
+## Maintenance Rule
 
-`go-core` is the standard application foundation for Go services in this ecosystem:
-
-- startup and runtime composition should live here
-- service business logic should not
-- generic utilities should go to `utils-shared`, not `go-core`
-- selected platform-standard technical contracts may live here when intentionally shared, such as transaction observability for transaction-oriented services
-
-Folder Structure
-
-`.ai/context.md`, `.ai/architecture.md`, `.ai/workflow.md`
-Contain the stable v1 source-of-truth context for automated work.
-
-`.ai/context`
-Contains supporting framework context, ownership boundaries, and repository maps.
-
-`.ai/prompts`
-Defines AI roles for planning, execution, fixes, tests, and review.
-
-`.ai/tasks`
-Contains task definitions for bounded changes.
-
-`.ai/STATUS.md`
-Contains the current progress snapshot across task files.
-
-Workflow
-
-1. Create a task
-
-`.ai/tasks/refactor_example.md`
-
-2. Plan the task
-
-`forge plan refactor_example`
-
-3. Execute the task
-
-`forge run refactor_example`
-
-4. Run verification
-
-`go test ./...`
-
-5. Fix follow-up issue
-
-`forge fix refactor_example --error "error message"`
-
-6. Review diff or path
-
-`forge review config/load.go`
-
-Safety Guards
-
-Tasks must define:
-
-- goal
-- scope layers
-- allowed paths
-- constraints
-
-AI must not introduce framework behavior that should live in downstream services.
+Update the relevant `.ai/` file whenever public behavior changes.
+`.ai/` is the single source of truth for AI context in this repo.

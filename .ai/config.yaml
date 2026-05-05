@@ -1,17 +1,19 @@
 version: v1
 
-# Token-Optimized Configuration:
-# Kami membatasi struktur autoload ini agar tidak menghabiskan jendela token (context window).
-# AI IDE akan mencari dan mengambil sub-dokumen secara otonom (on-demand fetching) 
-# apabila sesi percakapan memang mengarah pada spesifikasi yang dibutuhkan.
+# AI context file index for go-core.
+# Lists the canonical context files in recommended reading order.
 
 context:
-  # Konteks Inti & Arsitektur
+  # Always read first
   - .ai/context.md
   - .ai/architecture.md
-  - .ai/go-core.md
 
-  # Aturan Hukum (Konstitusi & Kontrak Code)
-  - .ai/context/contracts.md
-  - .ai/context/rules.md
-  - .ai/context/engineering-rules.md
+  # Read based on task area
+  - .ai/security.md
+  - .ai/transactions.md
+  - .ai/modules.md
+  - .ai/data-flow.md
+  - .ai/integrations.md
+  - .ai/conventions.md
+  - .ai/decisions.md
+  - .ai/workflow.md

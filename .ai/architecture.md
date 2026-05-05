@@ -1,66 +1,153 @@
-# go-core Architecture
+# go-core · Architecture
 
-## Architectural Shape
-`go-core` is a framework/library repository, not a business service.
+## System Design
 
-Core layers:
-1. App container and lifecycle
-2. Config loading and validation
-3. Transport wrappers
-4. Observability and logging baseline
-5. Infra connectors and operational helpers
-6. Shared technical contracts
-7. Examples and templates for downstream adoption
+`go-core` is a **framework/library repository** — not a runnable service.
+It provides the runtime foundation that consuming microservices compose and own.
 
-## Stable Runtime Path
-1. load config
-2. validate config
-3. optionally run startup migration
-4. build `app.App` with `app.New(ctx, cfg)`
-5. build and register gRPC and/or HTTP gateway
-6. run via `server.Run(...)`
-7. shut down through lifecycle ownership
+### Architectural Style
 
-## Stable Runtime Contracts
-Runtime orchestration:
-- `app.New(...)` emits `app_init`
-- `app.Start(...)` emits runtime start and shutdown-request signals
-- lifecycle emits `lifecycle_shutdown` and `shutdown_hook`
-- `server.Run(...)` emits runtime orchestration and component-start signals
-- `server.LogStartupReadiness(...)` emits readiness signals for startup visibility
+- **Modular infrastructure library** — each package is independently adoptable
+- **12-Factor App compliant** — all config from environment variables
+- **Explicit lifecycle** — no hidden background goroutines; consuming service registers all shutdown hooks
+- **Opt-in infra** — Redis, Kafka, Memcached, tracing are never started unless configured
 
-Transport boundary:
-- gRPC wrappers own request ID propagation, auth extraction/verification, request metrics, service metrics, and `grpc_request` service logs
-- HTTP gateway wrappers own request ID propagation, HTTP panic recovery, HTTP payload signature validation, HTTP metrics, service metrics, and `http_request` service logs
-- transport wrappers keep external errors compact and internal diagnostics structured
+---
 
-Observability baseline:
-- `logger.ServiceLog` is the default technical service-flow log
-- `logger.DBLog` is the default DB operational/query log
-- `logger.TransactionLog` is only for transaction-oriented services
-- metrics and tracing remain additive and framework-level
+## Layer Model
 
-## Boundary Rules
-Keep in `go-core`:
-- reusable runtime/bootstrap behavior
-- explicit infra integration contracts
-- technical observability and error contracts
+```
+┌─────────────────────────────────────────────────────┐
+│                   Consuming Service                  │
+│     (business logic, domain, handlers, proto)        │
+└───────────────────────┬─────────────────────────────┘
+                        │ uses
+┌───────────────────────▼─────────────────────────────┐
+│                      go-core                         │
+│                                                      │
+│  ┌─────────────────────────────────────────────┐    │
+│  │  Transport Layer                             │    │
+│  │  server/grpc  ·  server/gateway              │    │
+│  │  (auth interceptors, metrics, panic recovery)│    │
+│  └──────────────────┬──────────────────────────┘    │
+│                     │                                │
+│  ┌──────────────────▼──────────────────────────┐    │
+│  │  Application Container (app/)               │    │
+│  │  lifecycle · dependency wiring · shutdown    │    │
+│  └──────────────────┬──────────────────────────┘    │
+│                     │                                │
+│  ┌──────────────────▼──────────────────────────┐    │
+│  │  Infrastructure Layer                        │    │
+│  │  database · dbtx · cache · messaging         │    │
+│  │  migration · resilience                      │    │
+│  └──────────────────┬──────────────────────────┘    │
+│                     │                                │
+│  ┌──────────────────▼──────────────────────────┐    │
+│  │  Cross-Cutting Concerns                      │    │
+│  │  logger · observability · security · errors  │    │
+│  └─────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────┘
+```
 
-Keep out of `go-core`:
-- business policies
-- service-specific domain workflows
-- product-specific defaults, aliases, or event semantics
-- hidden background behavior not controlled by the consuming service
+---
 
-## Change Sensitivity
-High-sensitivity areas:
-- `app/`
-- `config/`
-- `server/`
-- `migration/`
-- `errors/`
-- `security/`
-- `logger/`
-- `observability/`
+## Stable Bootstrap Path
 
-Any change in these areas must be reviewed as a public-contract risk first.
+```
+main()
+  │
+  ├─ signal.NotifyContext(SIGINT, SIGTERM)
+  │
+  ├─ config.Load(ctx, cfg)        ← env parsing + normalization
+  ├─ cfg.Validate()               ← fail-fast on missing required fields
+  │
+  ├─ migration.AutoRunUp(...)     ← optional, with distributed lock
+  │
+  ├─ app.New(ctx, cfg)            ← wire: logger, metrics, tracing,
+  │                                  DB pools, Redis, Memcached, lifecycle
+  │
+  ├─ build gRPC server + register handlers
+  ├─ build HTTP gateway + register handlers
+  │
+  └─ server.Run(...)              ← multiplex gRPC+HTTP, block on signal,
+                                    graceful shutdown via lifecycle
+```
+
+---
+
+## Service Interactions
+
+### Transport Boundary
+
+```
+HTTP Client
+    │ REST/JSON
+    ▼
+server/gateway (HTTP)
+    │ HMAC signature check (optional)
+    │ request-id injection
+    │ OTEL metrics + tracing
+    │ panic recovery
+    │ translates → gRPC-Gateway → protobuf
+    ▼
+server/grpc (gRPC)
+    │ JWT extraction + verification
+    │ Claims injected into context
+    │ grpc_request ServiceLog
+    │ request metrics
+    ▼
+Service Handler (consuming service)
+    │
+    ├─ dbtx.WithTx → repository → dbtx.FromContext
+    ├─ outbox.PublishTx (same transaction)
+    └─ logger.LogTransaction / LogService
+```
+
+### Readiness Path
+
+```
+GET /ready
+    │
+    ├─ DB ping (required databases)
+    ├─ Redis ping (if enabled)
+    ├─ Memcached ping (if enabled)
+    └─ 200 OK or 503 Service Unavailable
+```
+
+---
+
+## High-Risk Change Areas
+
+Changes in these packages must be treated as **public contract risk** first:
+
+| Package | Risk |
+|---|---|
+| `app/` | Breaks every service bootstrap path |
+| `config/` | Breaks every env-based configuration |
+| `server/` | Breaks transport contract, readiness, health |
+| `migration/` | Breaks migration autorun and lock semantics |
+| `errors/` | Breaks transport-facing error contract |
+| `security/` | Breaks cross-service auth behavior |
+| `logger/` | Breaks operational observability baselines |
+| `observability/` | Breaks Prometheus metric naming/labels |
+
+---
+
+## Scaling Considerations
+
+- **Stateless by design** — `go-core` holds no mutable runtime state beyond initialized connections
+- **Horizontal scaling**: All instances share the same connection pool config; connection counts multiply with replicas
+- **Migration locking**: `MIGRATION_LOCK_ENABLED` prevents concurrent migration corruption in multi-pod K8s deployments
+- **Outbox workers**: Worker pods vs. handler pods can be separated — consuming service controls topology
+- **Metrics cardinality**: Avoid high-cardinality label values (e.g., user IDs) — label sets are defined at framework level and are intentionally bounded
+- **Circuit breaker**: Per-instance state — no distributed state sharing; each pod has its own breaker counts
+
+---
+
+## Key Design Decisions
+
+- **gRPC-gateway over Gin/Fiber/Echo** — enforces single protobuf contract, HTTP is a projection
+- **Viper/env config over YAML** — enforces 12-factor compliance, simplifies container deployments
+- **Context-based transaction propagation** — `dbtx` avoids passing `*sql.Tx` through function signatures
+- **Explicit lifecycle ownership** — no hidden goroutines; consuming service decides what starts and when
+- **Outbox pattern for event durability** — direct publish is lossy on crash; outbox ensures transactional delivery

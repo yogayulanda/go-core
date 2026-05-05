@@ -1,80 +1,46 @@
-# AI-Assisted Development System for `go-core`
+# go-core — AI Development Principles
 
-## Overview
+`go-core` is an infrastructure foundation library for Go microservices.
+Not a business service. Not a generic utils repo. Domain-agnostic. Go 1.24.
 
-This repository uses an AI workflow to help maintain `go-core` as a reusable infrastructure foundation.
-The repository is now in stable `v1.0.0`, so automated changes must treat documented public behavior as a compatibility contract.
+## Ownership: What go-core Owns
 
-The workflow exists to keep changes:
+- Startup composition and runtime wiring
+- Config loading and validation (env-driven, 12-factor)
+- Lifecycle and graceful shutdown
+- Transport wrappers: gRPC + HTTP gateway
+- Logging, metrics, and tracing baseline
+- Infrastructure connectors: DB, cache, messaging, migration
+- Technical error contract and transport mapping
+- Selected platform-standard technical contracts intentionally shared across services
 
-- safe
-- bounded
-- framework-oriented
-- domain-agnostic
-- foundation-first
+## Ownership: What go-core Does NOT Own
 
-## Layer Model
-
-```text
-Engineer
-   |
-   v
-Forge CLI
-   |
-   v
-Prompt Layer
-(.ai/prompts)
-   |
-   v
-Task Layer
-(.ai/tasks)
-   |
-   v
-Context Layer
-(.ai/context.md, .ai/architecture.md, .ai/workflow.md, .ai/context/*)
-   |
-   v
-AI Model
-```
-
-## Repository Rules
-
-`go-core` owns:
-
-- startup composition and runtime wiring
-- config loading and validation
-- lifecycle and shutdown behavior
-- transport wrappers
-- logging, metrics, tracing baseline
-- infra connectors and contracts
-- migration helper behavior
-- technical error contract and mapping
-- selected platform-standard technical contracts intentionally shared across services
-
-`go-core` does not own:
-
-- business fields
-- service schema choices
-- product-specific workflow assumptions
-- service-specific default names such as `transaction`, `history`, `payment`
-- generic utilities that belong in `utils-shared`
+- Business entities or domain rules
+- Service-specific schema or workflow semantics
+- Product-specific naming, aliases, or event payloads
+- Hidden automation not controlled by the consuming service
+- Generic utilities → those belong in `utils-shared`
 
 ## Prompt Roles
 
-- `breakdown.md`: planner
-- `execute.md`: framework engineer
-- `fix.md`: debugger
-- `test.md`: tester
-- `review.md`: reviewer
+| Prompt | Purpose |
+|---|---|
+| `prompts/breakdown.md` | Plan a task — assess risk and define scope before writing code |
+| `prompts/execute.md` | Implement a planned change |
+| `prompts/fix.md` | Debug and fix a specific error |
+| `prompts/test.md` | Write unit and integration tests |
+| `prompts/review.md` | Review code before merge |
+| `prompts/new-feature.md` | Add a new module or feature |
+| `prompts/security-review.md` | Audit a change touching auth, data, or secrets |
+| `prompts/architecture-consult.md` | Get structured analysis on a design decision |
 
 ## Execution Principles
 
-- prefer safe evolution
-- allow bounded refactors when they improve the framework shape
-- avoid hidden side effects
-- preserve documented exported behavior and treat semver compatibility as the default
-- keep defaults generic
-- keep service-specific semantics out of framework code and docs
-- keep generic utilities out of `go-core`
-- allow explicit platform-standard observability contracts when intentionally standardized
-- target Go `1.24`
+- Prefer safe evolution — additive changes first
+- Allow bounded refactors that improve the framework shape
+- Avoid hidden side effects and undocumented runtime behavior
+- Preserve documented exported behavior as the semver contract
+- Keep defaults generic — no service-specific names anywhere
+- Keep service-specific semantics out of framework code and docs
+- Target Go `1.24`
