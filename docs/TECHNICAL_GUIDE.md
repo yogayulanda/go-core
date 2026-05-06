@@ -123,6 +123,43 @@ if nominal <= 0 {
 
 ---
 
+## 8. Migrasi Skema Database Otomatis (`migration/`)
+Digunakan untuk mengeksekusi perubahan tabel *database* (seperti `CREATE TABLE`, `ALTER`) saat aplikasi pertama kali menyala (menggunakan basis `goose`).
+
+**Variabel Konfigurasi:**
+- `MIGRATION_AUTO_RUN` (Jika `true`, aplikasi akan menjalankan migrasi sebelum server HTTP/gRPC diizinkan menyala).
+- `MIGRATION_DB` (Menunjuk alias database mana yang akan dimigrasi, contoh: `primary`).
+- `MIGRATION_DIR` (Folder tempat file SQL disimpan, misal: `migrations/primary`).
+- `MIGRATION_LOCK_ENABLED` (Otomatis mencegah *race condition* jika aplikasi Anda di-deploy ke banyak K8s Pod sekaligus).
+
+---
+
+## 9. Pemanggilan Eksternal yang Kebal (*Resilience & HTTP Client*)
+Ketika aplikasi Anda memanggil API pihak ketiga (misal: API Bank atau Payment Gateway), koneksi sangat rentan terhadap gangguan. `go-core` menyediakan modul `resilience/` dan `httpclient/` untuk melindunginya.
+
+**Fitur HTTP Client (`httpclient/`):**
+- **Otomatis Retry:** Jika API Bank mengembalikan HTTP 500, *client* akan mencoba ulang secara otomatis (dengan pola penundaan *Backoff*).
+- **Circuit Breaker:** Jika API Bank mati total, *client* akan memutus sirkuit (*Fail-Fast*) agar server Anda tidak kehabisan RAM karena menunggu koneksi bodong.
+- **Auto-Trace:** Otomatis membawa ID Pelacakan (OTEL/Trace ID) agar mudah ditelusuri dari *Dashboard*.
+
+**Contoh Implementasi:**
+```go
+client := httpclient.New(httpclient.Options{
+    Timeout:      5 * time.Second,
+    MaxRetries:   3,
+    EnableBreaker: true,
+})
+resp, err := client.Do(ctx, req) // Otomatis Retry jika gagal!
+```
+
+---
+
+## 10. Pola Pesan Asinkron (*Messaging & Outbox Pattern*)
+Selain integrasi Kafka standar (`messaging/`), `go-core` memfasilitasi pola **Outbox** (`messaging/outbox/`). 
+Fitur ini mencegah hilangnya *event* ke Kafka saat *database* Anda berhasil di-*commit*, namun tiba-tiba listrik padam sebelum *event* sempat terkirim. *Outbox Worker* akan secara mandiri memastikannya terkirim (*At-Least-Once Delivery*).
+
+---
+
 ## Ringkasan Alur Startup Standar di Service
 Inilah cara setiap *microservice* Anda kelak dijalankan menggunakan komponen-komponen di atas:
 
