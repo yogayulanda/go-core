@@ -72,6 +72,7 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 	var handler http.Handler = mux
 	handler = withHTTPRequestID(handler)
 	handler = withHTTPMetrics(application, handler)
+	handler = withSuccessEnvelope(handler)
 	handler = withCORS(handler)
 	handler = otelhttp.NewHandler(handler, "http_gateway")
 	handler = withSignatureValidation(application, handler)

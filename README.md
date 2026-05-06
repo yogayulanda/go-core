@@ -323,7 +323,32 @@ MEMCACHED_ENABLED=false
 KAFKA_ENABLED=false
 ```
 
-### Error response contract
+### API Response Contracts
+
+`go-core` enforces strict JSON response envelopes at the API Gateway level to ensure a consistent experience for downstream clients (Frontend/Mobile). All gRPC responses are automatically wrapped.
+
+#### Success response
+
+HTTP `2xx` responses are wrapped symmetrically:
+
+```json
+{
+  "success": true,
+  "trace_id": "req-123",
+  "transaction_id": "tx-123",
+  "timestamp": "2026-05-05T17:00:00Z",
+  "data": {
+    "id": "rec-998877",
+    "amount": 50000
+  }
+}
+```
+
+Notes:
+- `data` contains the exact JSON translation of your Protobuf `message` definition.
+- Health (`/health`), Ready (`/ready`), and Metrics endpoints are intentionally excluded from this envelope.
+
+#### Error response
 
 HTTP error response (gateway) is kept strictly structured and standardized:
 
