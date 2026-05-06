@@ -10,6 +10,14 @@ import (
 	"github.com/yogayulanda/go-core/observability"
 )
 
+type successResponse struct {
+	Success       bool            `json:"success"`
+	TraceID       string          `json:"trace_id,omitempty"`
+	TransactionID string          `json:"transaction_id,omitempty"`
+	Timestamp     string          `json:"timestamp"`
+	Data          json.RawMessage `json:"data"`
+}
+
 type responseBuffer struct {
 	http.ResponseWriter
 	status      int
@@ -67,12 +75,12 @@ func withSuccessEnvelope(next http.Handler) http.Handler {
 				data = json.RawMessage("{}") // Default empty object if no body
 			}
 
-			wrapped := map[string]interface{}{
-				"success":        true,
-				"trace_id":       traceID,
-				"transaction_id": txID,
-				"timestamp":      time.Now().UTC().Format(time.RFC3339),
-				"data":           data,
+			wrapped := successResponse{
+				Success:       true,
+				TraceID:       traceID,
+				TransactionID: txID,
+				Timestamp:     time.Now().UTC().Format(time.RFC3339),
+				Data:          data,
 			}
 
 			// Copy original headers
