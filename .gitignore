@@ -8,7 +8,7 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# Output of the go coverage tool
 *.out
 
 # Dependency directories (remove the comment below to include it)
@@ -21,12 +21,30 @@ go.work.sum
 # env file
 .env
 
-# MacOS
+# Forge context scratch/generated outputs
+.forge/context/temp/
+!.forge/context/temp/.gitkeep
+.forge/context/generated/*
+!.forge/context/generated/.gitkeep
+
+# OS artifacts
 .DS_Store
+Thumbs.db
+
+# Editor swap/backup
+*.swp
+*.swo
+*~
 
 # IDEs
 .idea/
 .vscode/
+*.iml
+
+# Local cache & logs
+*.log
+*.tmp
+.cache/
 
 # Accidentally compiled binaries without extensions (if they match package names)
 httpclient_example
