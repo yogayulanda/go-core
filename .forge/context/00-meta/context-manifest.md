@@ -8,7 +8,7 @@ source: ai
 evidence:
   - { type: doc, ref: .forge/forge.config.yaml }
 owner: unresolved
-updated: 2026-05-21
+updated: 2026-05-24
 ---
 
 # Context Manifest
@@ -56,6 +56,7 @@ Inactive by evidence: frontend, mobile, infrastructure.
 | `.forge/context/layers/backend/backend.md` | `layer.backend` | layer | inferred | unresolved |
 | `.forge/context/layers/testing/README.md` | `layer.testing.readme` | layer | inferred | unresolved |
 | `.forge/context/layers/testing/testing.md` | `layer.testing` | layer | inferred | unresolved |
+| `.forge/context/modes/execute.md` | `mode.execute` | mode | inferred | unresolved |
 | `.forge/context/modes/implementation.md` | `mode.implementation` | mode | inferred | unresolved |
 | `.forge/context/modes/planning.md` | `mode.planning` | mode | inferred | unresolved |
 | `.forge/context/modes/review.md` | `mode.review` | mode | inferred | unresolved |

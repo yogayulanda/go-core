@@ -1,40 +1,34 @@
 ---
 id: mode.review
-title: Mode - Review
+title: "Mode: Review"
 type: mode
-status: inferred
-confidence: medium
-source: ai
-evidence:
-  - { type: doc, ref: .forge/forge.config.yaml }
-owner: unresolved
-updated: 2026-05-21
+status: confirmed
+confidence: high
+source: human
+owner: forge-context-engine
+updated: 2026-05-24
 ---
 
-# Mode - Review
-
+# Mode: Review
 ## include
-
-- `.forge/context/layers/backend/backend.md`
-- `.forge/context/layers/testing/testing.md`
-- `.forge/context/systems/go-core/system.md`
-- `.forge/context/knowledge/inferred.md`
-- `.forge/context/knowledge/unknowns.md`
-
+- `layers/<related>`
+- `knowledge/decisions/`
 ## on_demand
-
-- `.forge/context/knowledge/assumptions.md`
-- `.forge/context/knowledge/decisions/ADR-0001-adopt-forge-context.md`
-
+- `systems/<related>`
+- `knowledge/inferred.md`
+- `knowledge/assumptions.md`
+- `generated/<relevant>`
 ## exclude
-
-- `.forge/context/generated/*`
-- `.forge/context/temp/*`
-
+- `systems/<unrelated>`
+- `layers/<unrelated>`
 ## token_budget
-
 6000
-
 ## notes
-
-Concise guidance only: check evidence drift, validation attribution, regressions, and missing tests.
+- Review correctness, regressions, risks, and consistency against evidence, decisions, and task-scoped context.
+- Verify execute results against approved tasks, architecture/runtime consistency, and reported validation evidence.
+- Do not replace testing mode; reference test evidence when assessing regression risk and coverage gaps.
+- Check topology, runtime behavior, data flow, contracts, and layer/system boundaries only when relevant evidence is loaded.
+- Lead with evidence-based critique; keep unevidenced concerns as uncertainty, not confirmed defects.
+- Identify unconfirmed proposed defaults and flag any accidental promotion of proposed assumptions into confirmed behavior.
+- Treat raw secret exposure in diffs, reports, generated context, or comments as a security finding requiring redaction.
+- Report reviewed areas, loaded context, missing evidence or ambiguity, risk severity, and whether review mode was sufficient.
