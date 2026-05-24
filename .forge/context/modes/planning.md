@@ -1,35 +1,32 @@
 ---
 id: mode.planning
-title: Mode - Planning
+title: "Mode: Planning"
 type: mode
-status: inferred
-confidence: medium
-source: ai
-evidence:
-  - { type: doc, ref: .forge/forge.config.yaml }
-owner: unresolved
-updated: 2026-05-21
+status: confirmed
+confidence: high
+source: human
+owner: forge-context-engine
+updated: 2026-05-24
 ---
 
-# Mode - Planning
+# Mode: Planning
 
 ## include
 
-- `.forge/context/knowledge/assumptions.md`
-- `.forge/context/knowledge/unknowns.md`
-- `.forge/context/knowledge/inferred.md`
+- `knowledge/decisions/`
+- `knowledge/assumptions.md`, `knowledge/unknowns.md`
+- `layers/<related>`
 
 ## on_demand
 
-- `.forge/context/layers/backend/backend.md`
-- `.forge/context/layers/testing/testing.md`
-- `.forge/context/systems/go-core/system.md`
-- `.forge/context/knowledge/decisions/ADR-0001-adopt-forge-context.md`
+- `systems/<related>`, `knowledge/inferred.md`
+- Contracts/events/data: API, proto, route, topic, producer/consumer, migration, constraint, table-role context
+- UI/ops/runtime: route, page, component, state, API-consumption, accessibility, deployment, environment, logging/metrics/tracing context
 
 ## exclude
 
-- `.forge/context/generated/*`
-- `.forge/context/temp/*`
+- `systems/<unrelated>`
+- `layers/<unrelated>`
 
 ## token_budget
 
@@ -37,4 +34,7 @@ updated: 2026-05-21
 
 ## notes
 
-Concise guidance only: prioritize unresolved assumptions and unknowns before planning changes.
+- Output an Engineering Change Plan (ECP): evidence-based, layer-adaptive engineering planning covering proposed change, architecture/runtime impact, dependency/contract impact, implementation strategy, risks, unknowns, validation, and rollback.
+- ECP is not brainstorming, PRD/business prose, implementation code, or architecture rewrite by default.
+- Adapt sections to evidence: backend transactions/data/contracts; frontend UX/routes/components/state/accessibility/performance/analytics; infrastructure deployment/environment/reliability/security.
+- Separate evidence, inference, and unknowns; do not invent topology, ownership, contracts, deployability, or runtime relationships from imports alone; load extra context only for the scoped change.
