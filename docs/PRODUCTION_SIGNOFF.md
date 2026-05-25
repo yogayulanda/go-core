@@ -31,7 +31,7 @@ CI baseline:
 - `.github/workflows/ci.yml` runs `make test`, `make vet`, and `make lint` on push and pull request
 - local `make quality-gate` remains the stronger release gate because it also includes race testing and `gosec`
 
-## 2) Smoke Gate (mandatory, staging)
+## 2) Smoke Gate (mandatory, release environment)
 
 Run:
 
@@ -45,7 +45,7 @@ Pass criteria:
 - `/version` returns 200
 - `/version` matches the injected `version`, `commit`, and `build_date` for the release candidate
 
-## 3) Performance Gate (mandatory, staging)
+## 3) Performance Gate (mandatory, release environment)
 
 Use k6 scenario runner:
 
@@ -70,16 +70,16 @@ Tune thresholds with env:
 - `P99_MS`
 - `FAIL_RATE`
 
-## 4) Failure Drill Gate (mandatory, staging)
+## 4) Failure Drill Gate (mandatory, release environment)
 
-Run with dependency stop/start commands (usually `kubectl` commands):
+Run with dependency stop/start commands supplied by the consuming service environment:
 
 ```bash
 BASE_URL=https://staging.example.com \
-STOP_DB_CMD="kubectl scale deploy/db --replicas=0 -n staging" \
-START_DB_CMD="kubectl scale deploy/db --replicas=1 -n staging" \
-STOP_KAFKA_CMD="kubectl scale sts/kafka --replicas=0 -n staging" \
-START_KAFKA_CMD="kubectl scale sts/kafka --replicas=1 -n staging" \
+STOP_DB_CMD="<command to stop the database dependency>" \
+START_DB_CMD="<command to restore the database dependency>" \
+STOP_KAFKA_CMD="<command to stop the Kafka dependency>" \
+START_KAFKA_CMD="<command to restore the Kafka dependency>" \
 make failure-drill
 ```
 

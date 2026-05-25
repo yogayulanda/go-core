@@ -35,10 +35,10 @@ func TestDefaultMigrationLockKey_ServiceAndDB_ReturnExpectedKey(t *testing.T) {
 		{
 			name: "service and db name set",
 			cfg: &config.Config{
-				App: config.AppConfig{ServiceName: "transaction-history-service"},
+				App: config.AppConfig{ServiceName: "example-service"},
 			},
 			dbName: "history",
-			want:   "transaction-history-service:migration:history",
+			want:   "example-service:migration:history",
 		},
 	}
 

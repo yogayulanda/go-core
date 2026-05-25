@@ -355,7 +355,7 @@ func TestAutoRunUpWithRunner_CustomLockKey_UseCustomLockKey(t *testing.T) {
 func minimalAutoRunConfig() *config.Config {
 	return &config.Config{
 		App: config.AppConfig{
-			ServiceName: "transaction-history-service",
+			ServiceName: "example-service",
 		},
 		Databases: map[string]config.DBConfig{
 			"transaction_history": {

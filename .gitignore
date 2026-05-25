@@ -1,4 +1,7 @@
 # Binaries for programs and plugins
+bin/
+dist/
+build/
 *.exe
 *.exe~
 *.dll
@@ -10,6 +13,9 @@
 
 # Output of the go coverage tool
 *.out
+coverage/
+coverage.*
+*.coverprofile
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
@@ -18,8 +24,18 @@
 go.work
 go.work.sum
 
-# env file
+# Environment files
 .env
+.env.*
+!.env.example
+
+# Local assistant/context artifacts
+.ai/
+.claude/
+AI_RULES.md
+AGENTS.md
+CONTEXT.md
+PROJECT_CONTEXT.md
 
 # Forge context scratch/generated outputs
 .forge/context/temp/
@@ -30,11 +46,14 @@ go.work.sum
 # OS artifacts
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Editor swap/backup
 *.swp
 *.swo
 *~
+*.bak
+*.orig
 
 # IDEs
 .idea/
@@ -45,6 +64,15 @@ Thumbs.db
 *.log
 *.tmp
 .cache/
+tmp/
+temp/
+
+# Local secret/certificate material
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
 
 # Accidentally compiled binaries without extensions (if they match package names)
 httpclient_example

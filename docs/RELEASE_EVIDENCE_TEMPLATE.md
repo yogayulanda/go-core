@@ -12,7 +12,7 @@
 - [ ] `docs/CHANGE_CHECKLIST.md` reviewed
 - Notes:
 
-## Smoke Gate (staging)
+## Smoke Gate
 
 - [ ] `/health` PASS
 - [ ] `/ready` PASS
@@ -21,7 +21,7 @@
 - Base URL:
 - Notes:
 
-## Performance Gate (staging)
+## Performance Gate
 
 - [ ] Steady PASS
 - [ ] Spike PASS
