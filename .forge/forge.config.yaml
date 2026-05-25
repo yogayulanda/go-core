@@ -13,6 +13,9 @@ loading:
   default_mode: implementation
   respect_size_budget: true
 
+runtime:
+  non_interactive: true
+
 size_budget:
   core_lines: 200
   layer_lines: 150
