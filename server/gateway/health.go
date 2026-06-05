@@ -40,8 +40,7 @@ const (
 
 func registerHealthEndpoints(mux *runtime.ServeMux, application *app.App) error {
 	if err := mux.HandlePath("GET", "/health", func(w http.ResponseWriter, r *http.Request, _ map[string]string) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+		writeHealthOK(w)
 	}); err != nil {
 		return err
 	}
@@ -66,6 +65,11 @@ func registerHealthEndpoints(mux *runtime.ServeMux, application *app.App) error 
 	}
 
 	return nil
+}
+
+func writeHealthOK(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
 }
 
 func toSQLPingers(in map[string]*database.DB) map[string]sqlPinger {

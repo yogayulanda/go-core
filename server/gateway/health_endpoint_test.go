@@ -133,6 +133,19 @@ func TestHealthEndpoint_OK(t *testing.T) {
 	}
 }
 
+func TestWriteHealthOK(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	writeHealthOK(rec)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if strings.TrimSpace(rec.Body.String()) != "ok" {
+		t.Fatalf("unexpected body: %q", rec.Body.String())
+	}
+}
+
 func TestVersionEndpoint_JSON(t *testing.T) {
 	origVersion := version.Version
 	origCommit := version.Commit
