@@ -144,6 +144,56 @@ See `specs/artifact-lifecycle.md` for the full artifact specification.
 
 Summary: Lifecycle artifacts are optional, human-readable continuity helpers under `.forge/generated/` when persisted. Default behavior is chat output first; save Markdown artifacts only when requested, approved for continuity, or clearly useful for multi-session/multi-agent continuation. Generated artifacts do not replace repository code, docs, ADRs, or human confirmations. Context promotion goes through reviewed `.forge/context-patches/`, not direct writes into `.forge/context`. Artifact links are trace references only — not dependency graphs, workflow state, DAGs, orchestration, execution triggers, or agent memory.
 
+## Context Quality Contract
+
+`.forge/context` is the curated source of truth for durable repository cognition.
+
+Good curated context is:
+- Stable beyond the current task or chat session
+- Repository-specific
+- Evidence-backed
+- Compact and non-redundant
+- Useful for future AI or human work in this repository
+- Durable enough to survive one-off execution details
+- Clear about `confirmed` vs `inferred` vs `assumption` vs `unknown`
+- Scoped to repository/project knowledge rather than temporary execution traces
+
+Do not put these in `.forge/context`:
+- Raw terminal logs
+- Full execution reports
+- One-off Quick Plans
+- Temporary ECPs
+- Long review reports
+- Speculative ideas without evidence
+- Duplicate notes already captured in better context or source documents
+- Stale details without current evidence
+- Generic AI advice not specific to this repository
+- Scratchpad or implementation working notes
+
+Path boundary:
+- `.forge/context` holds curated durable context only.
+- `.forge/generated/...` holds working artifacts when requested or approved.
+- `.forge/context-patches/...` holds proposed durable context updates pending review.
+- A generated artifact is not automatically context.
+- A context patch is a proposal, not automatically accepted context.
+
+Context Quality Checklist:
+- Is this stable beyond the current task?
+- Is it repository-specific?
+- Is there current evidence?
+- Will future work benefit from it?
+- Is it compact enough?
+- Does it belong in `.forge/context` rather than `.forge/generated/...`?
+- Is it replacing or duplicating existing context?
+- Does it require review before promotion?
+
+Context maintenance cadence:
+- `Context Impact Check` is a small per-task review check.
+- `Context Quality Audit` is a larger milestone/release/manual check for stale, noisy, missing, or low-quality context.
+- Do not turn every task into a full context quality audit.
+
+`review` should use a structured `Context Impact` section to determine whether a durable context update is needed. When an update is needed, propose a reviewable `.forge/context-patches/...` patch instead of mutating `.forge/context` directly. `verify-context` may validate curated context health and reviewable patch quality, but it must not accept patches automatically.
+
 When artifact persistence is mentioned in mode output or docs, keep it concise. Prefer wording such as:
 - `Artifact Persistence: Not saved by default.`
 - `Save to .forge/generated/... only when requested or approved.`
