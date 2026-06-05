@@ -1,36 +1,44 @@
 ---
-id: mode.testing
-title: "Mode: Testing"
-type: mode
+id: scenario.validation
+title: "Scenario Guidance: Validation"
+type: scenario
 status: confirmed
 confidence: high
 source: human
+evidence: [{ type: doc, ref: ../../../../specs/mode-invocation.md }]
 owner: forge-context-engine
-updated: 2026-05-24
+updated: 2026-06-05
 ---
 
-# Mode: Testing
+# Scenario Guidance: Validation
+
+`testing` is not a core lifecycle mode. Use this file only as compatibility, scenario, or historical guidance for validation-focused work.
+
+## route through core modes
+- Use `execute` for scoped per-task validation, final validation, and in-scope validation fixes.
+- Use `review` to inspect validation evidence, validation gaps, risk, and MR readiness.
+- Use `plan` when validation scope requires a new decision or broader strategy.
+
 ## include
 - `layers/testing`
 - `systems/<related>`
 - `knowledge/assumptions.md`
+
 ## on_demand
 - `layers/<related>`
 - `knowledge/decisions/`
 - `knowledge/inferred.md`
-- `generated/<relevant>`
+- `.forge/generated/<relevant>`
+
 ## exclude
 - `systems/<unrelated>`
 - `layers/<unrelated>`
+
 ## token_budget
 6000
+
 ## notes
-- Define or implement task-scoped unit, integration, regression, coverage, and operational verification tests.
-- Follow existing repo test placement conventions when clear; report the detected convention instead of forcing a new layout.
-- If no convention exists, colocate unit tests near target packages/files and place non-unit tests under `testing/integration`, `testing/e2e`, `testing/mocks`, `testing/fixtures`, or `testing/helpers` as appropriate.
-- Keep unit, integration, e2e, mocks, fakes, stubs, fixtures, and helpers distinct; avoid mixing unrelated test concerns in one folder without reason.
-- Reason about test isolation, mocks/fakes/stubs, fixtures, helpers, test dependencies, retry/error paths, rollback paths, and missing coverage.
-- If `runtime.non_interactive: false`, ask unresolved validation expectations only when needed; if `true`, emit an unresolved validation report.
-- Do not become generic architecture planning, review mode, or broad implementation redesign.
-- Redact credentials, tokens, cookies, private keys, and credential-bearing URLs from test evidence and validation notes.
-- Report test strategy or test changes, loaded context, missing evidence or ambiguity, commands run or skipped, and whether testing mode was sufficient.
+- Validation reports use `passed`, `failed`, `partial`, `blocked_by_environment`, or `not_run` when validation is requested.
+- Separate scoped validation, final validation, manual checks, environment blockers, coverage gaps, and risks.
+- Do not imply full validation without evidence.
+- Do not become planning, execution beyond approved scope, review approval, or redesign.

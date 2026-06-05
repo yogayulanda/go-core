@@ -55,3 +55,14 @@ Thin adapter for AI assistants. This file stores **no context** — it points to
 ## Notes
 
 `AGENTS.md` optional if second AI assistant exists. This adapter never replaces `00-meta/conventions.md` as normative contract source.
+<!-- BEGIN FORGE MANAGED BLOCK -->
+# CLAUDE.md - Forge Claude Wrapper
+
+Thin Claude-compatible entrypoint.
+
+Read `.forge/adapter.md` and follow it. `.forge/context` remains the curated source of truth.
+
+Claude may receive Forge requests through natural prompts or tool-specific `/forge-<mode>` syntax when available. Resolve those invocations to the active Forge core lifecycle or clearly labeled compatibility/scenario guidance.
+
+Keep replies concise and mode-aligned. Do not store repository cognition, lifecycle logic, validation policy, or artifact policy in this file.
+<!-- END FORGE MANAGED BLOCK -->

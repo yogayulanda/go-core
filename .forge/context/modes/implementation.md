@@ -5,31 +5,92 @@ type: mode
 status: confirmed
 confidence: high
 source: human
+evidence: [{ type: doc, ref: ../../../../specs/mode-invocation.md }]
 owner: forge-context-engine
-updated: 2026-05-24
+updated: 2026-06-05
 ---
 
 # Mode: Implementation
+
 ## include
 - `layers/<related>`
 - `systems/<related>`
 - `knowledge/decisions/`
 - `knowledge/inferred.md`
+
 ## on_demand
+- Approved plan or SDD
 - `knowledge/assumptions.md`
-- `generated/<relevant>`
+- `.forge/generated/<relevant>`
+
 ## exclude
 - `systems/<unrelated>`
 - `layers/<unrelated>`
+
 ## token_budget
 8000
-## notes
-- Convert an approved ECP, approved phases, or simple request into a human-reviewable engineering task breakdown.
-- Break work into explicit executable tasks with likely files/components, dependency ordering, migration/runtime sequencing when relevant, validation notes, and rollback visibility.
-- Do not modify code, redesign architecture, repeat full ECP reasoning, or silently redefine approved plans.
-- Load only task-relevant layers, systems, decisions, and inferences; use on-demand context only when task decomposition requires it.
-- Keep task scope bounded; do not introduce speculative redesign, ownership, topology, contracts, or behavior not supported by evidence.
-- If `runtime.non_interactive: false`, ask execution-blocking decisions before final task breakdown; if `true`, emit a blocked implementation report.
-- Continue on labeled proposed defaults only when low-risk, reversible, and non-authoritative; do not promote them into confirmed architecture/runtime behavior.
-- Never copy raw secrets from configs, env files, logs, fixtures, docs, or generated output into code or Forge context.
-- Report task list, likely files/components, dependencies, loaded context, missing evidence or ambiguity, proposed vs confirmed boundaries, and whether implementation mode was sufficient.
+
+## purpose
+Convert an approved plan into an Execution Context Package (ECP).
+
+## inputs
+- Approved plan with `status: ready_for_implementation`.
+- Relevant `.forge/context`.
+- Target adapter/tool.
+- Validation commands.
+- Risk policy and stop conditions.
+
+## behavior
+- Verify the plan is approved before generating execution instructions.
+- Produce a bounded, tool-ready ECP.
+- Convert the approved plan into a readiness package only; do not execute it.
+- Keep mode boundaries separate from assumptions carried into the ECP.
+- Resolve only execution packaging details that are safe and evidenced.
+- Keep universal edit guidance tool-aware: use the smallest safe edit mechanism available in the target tool, then add tool-specific notes only as sub-guidance.
+- Stop if required domain, security, architecture, contract, data, or migration decisions are missing.
+
+## outputs
+Execution Context Package (ECP) with:
+- Goal.
+- Approved scope.
+- Non-goals.
+- Mode Boundary.
+- Assumptions.
+- Relevant context.
+- Relevant evidence.
+- Exact files likely to change.
+- Task sequence.
+- Coding rules.
+- Safety / security constraints.
+- Acceptance criteria.
+- Validation commands.
+- Stop conditions.
+- Expected execution report format.
+- Status.
+- Step-by-step implementation guidance only inside the approved file/scope boundary.
+- Risk notes.
+- Target Tool Instructions:
+  - Use the smallest safe edit mechanism available in the target tool.
+  - For Codex, prefer `apply_patch` for scoped edits.
+  - For Claude Code, use its normal file-edit workflow while preserving approved scope.
+  - For Copilot, produce the smallest reviewable patch or task guidance according to the active Copilot workflow.
+  - Do not widen scope beyond the approved ECP.
+  - Do not commit or push unless explicitly requested by the human.
+
+## status values
+- `ecp_ready`
+- `blocked_by_decision`
+- `needs_more_evidence`
+- `needs_plan_approval`
+
+## boundaries
+- Implementation mode produces an ECP/readiness package only.
+- It does not edit files, stage, commit, push, or apply changes.
+- Execution requires explicit approval and `execute` mode.
+- Do not edit code, stage, commit, push, merge, deploy, or apply changes.
+- Do not silently redefine the approved plan.
+- Do not produce execution instructions while critical blockers remain.
+
+## next mode transitions
+- Use `execute` only after human approval of the ECP.
+- Return to `plan` when the approved plan is insufficient or contradicted by evidence.

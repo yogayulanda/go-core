@@ -1,0 +1,54 @@
+manifest_version: "1"
+forge_version: "0.5.0a0"
+profile: "service"
+selected_tools:
+  - codex
+  - claude
+installed_from: "git+https://github.com/yogayulanda/forge-context-engine.git"
+installed_at: "2026-06-05T02:28:02Z"
+template_revision: "0.5.0a0"
+source_revision: "0.5.0a0"
+managed_paths:
+  - .forge/.gitignore
+  - .forge/adapter.md
+  - .forge/forge.config.yaml
+  - .forge/forge-install.yaml
+  - .forge/context/00-meta/
+  - .forge/context/modes/
+  - AGENTS.md
+  - CLAUDE.md
+user_owned_paths:
+  - .forge/context/01-core/
+  - .forge/context/layers/
+  - .forge/context/repo-map/
+  - .forge/context/systems/
+  - .forge/context/knowledge/
+  - .forge/context/decisions/
+  - .forge/context/unknowns/
+  - .forge/context-patches/
+  - .forge/generated/
+local_only_paths:
+  - .forge/temp/
+  - .forge/cache/
+managed_file_hashes:
+  .forge/.gitignore: a96dd15e31be23b35e48a03a6806c73b0d4ed4d1e05282a0bda744511dcaf8bf
+  .forge/adapter.md: c1a28e0df4928fbef1c49b6bbc7b2f67156c270d0cd6f6a3f67926c9fa2a7b0c
+  .forge/context/00-meta/context-manifest.md: 7bc24d3cf976fafbcec5f2eae9aaa48992495daf9dd555699420117dec400cb6
+  .forge/context/00-meta/conventions-evidence.md: f1226a937009be6e37bf630fa6b74b17e4172024f23848c00bbc1b2688733109
+  .forge/context/00-meta/conventions-language.md: f4c8798207e4898a47dbf79f25e265c389558c6157f322505a02868d3342faad
+  .forge/context/00-meta/conventions-risk.md: 35477fc27df2bb9a95b7d60a72e26cacd1e917d46f36fa99bf592fd75a7c94d5
+  .forge/context/00-meta/conventions-validation.md: 18670aa6a14a44bf4a9155918138d5124afc837855aea3997910b81771f9f168
+  .forge/context/00-meta/conventions.md: 31c958e3dbd20b40b6c5b7c5d46078fc9240cba141569600d07aa17f97ea6583
+  .forge/context/00-meta/glossary.md: 55074e2101ef769913c408722127d490cfc4fa4c8b0b29807c7316c9e7e89cc4
+  .forge/context/modes/ask.md: 75b4073e530d9fd0249b4edb72de9e54333e5140e391360f7152c6451662f353
+  .forge/context/modes/execute.md: ea02fa2e2b44287aa71acd8998ee078969f2b1f0a1243771ae477eb74532fcfe
+  .forge/context/modes/implementation.md: 7ba4408be064020bfb74f3ce9d5a4c8107df32394ef12d4cf5da3be9df8a416e
+  .forge/context/modes/incident.md: fe669013dc361868f979db58bad5727bc97e977aa1286a5355a155b199b69d3f
+  .forge/context/modes/init.md: ec79cd3fe3ae6c48aa0c2f13ba822c6d58927917acb87998273ca6a964cd029a
+  .forge/context/modes/plan.md: 7afbc626bd66b4fa5d84d725f98a48ca6dd2d18bbe0046c9f19730b4a3db30e3
+  .forge/context/modes/planning.md: 025b58f3f1780532d6d7a19e5ddf32f7c5a3cf40aff2cfa08a11224e63eae5e4
+  .forge/context/modes/refactor.md: 19776df22975ec10d18ab5a40015037634025fbbfd5276be998e3aa96d39402f
+  .forge/context/modes/review.md: 63807bef8aeb19449bf716188756325999508f3e5aa6fccd0d67fe953f4d69df
+  .forge/context/modes/testing.md: 44f79dd049c3688b16a49f7d8c99577d61605fc7b29638e5860cc43b66247b33
+  .forge/context/modes/verify-context.md: 10923ef74d161f34bd119a0e51dd7647bf6be08aca02dc816ff17997ffb4d939
+  .forge/forge.config.yaml: 09cfb43ff3463d50ebda13a6f66472cc39b52c10572be671c322ac9b354658bf
