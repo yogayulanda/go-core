@@ -14,8 +14,9 @@
 - The module targets Go `1.24.3` and is configured primarily through environment variables.
 
 ## Confirmed Facts
-- Core required config includes service identity, environment, log level, shutdown timeout, and transport ports.
-- Optional profiles cover transport TLS, SQL databases, migration autorun and locking, tracing export, Redis, Memcached, Kafka, and internal JWT auth.
+- `SERVICE_NAME` is strictly required by validation, while `APP_ENV`, `LOG_LEVEL`, `SHUTDOWN_TIMEOUT`, `GRPC_PORT`, and `HTTP_PORT` are defaulted by `config.Load(...)`.
+- Supported runtime config also includes `LOG_TIMEZONE` for logger timestamp rendering.
+- Optional profiles cover transport TLS, SQL databases, migration autorun and locking, tracing export, Redis, Memcached, Kafka, internal JWT auth, and HTTP request-signature validation settings.
 - Validation guidance distinguishes `cfg.Validate()` for simple errors from `cfg.ValidateIssues()` for structured validation feedback.
 - Release builds are expected to inject `version.Version`, `version.Commit`, and `version.BuildDate`, and `/version` should expose the same values.
 - CI is defined in GitHub Actions, but production rollout topology, deployment manifests, and rollback automation are not part of this repository.

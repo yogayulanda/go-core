@@ -16,7 +16,7 @@
 ## Confirmed Facts
 - gRPC server construction is provided by `server/grpc.New(...)`, which installs recovery, request ID, auth, logging, and metrics unary interceptors plus OpenTelemetry gRPC stats handling.
 - The HTTP gateway created by `server/gateway.New(...)` always registers `/health`, `/ready`, `/version`, and `/metrics`, and conditionally registers pprof endpoints when `HTTP.PprofEnabled` is true.
-- Gateway responses use a custom error handler and success-envelope middleware; docs describe the compact public error payload as `code`, `message`, `request_id`, and optional `details`.
+- Gateway responses use a custom error handler and success-envelope middleware. Error responses use `errors.ErrorResponse` with `success`, `code`, `message`, optional `user_message`, optional `trace_id`, optional `transaction_id`, `timestamp`, and optional `details`; success responses use an envelope with `success`, optional `trace_id`, optional `transaction_id`, `timestamp`, and `data`.
 - `errors.AppError` is the canonical application-visible error contract; stable codes include `INVALID_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `SESSION_EXPIRED`, `SERVICE_UNAVAILABLE`, and `INTERNAL_ERROR`.
 - Messaging contracts use `messaging.Message` with `Topic`, `Key`, `Payload`, and `Headers`; the documented payload envelope should include `event_id`, `event_type`, `event_version`, and `occurred_at`.
 
