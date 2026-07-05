@@ -30,7 +30,8 @@ Thin adapter contract for target-repository entrypoints such as `AGENTS.md`, `CL
 Use only these active core modes:
 
 ```text
-init -> ask -> plan -> implementation -> execute -> review -> verify-context
+init -> ask -> plan -> implementation -> execute -> review
+verify-context | update-context
 ```
 
 - `plan` creates a reviewable plan or SDD and does not edit code.
@@ -43,6 +44,7 @@ init -> ask -> plan -> implementation -> execute -> review -> verify-context
 - `review` checks correctness, validation evidence, security, and context impact.
 - `review` is read-only by default; fixes require a separately approved execution flow.
 - `verify-context` checks `.forge/context` health only.
+- `update-context` refreshes active curated context under `.forge/context/` only.
 
 Legacy names such as `planning`, `testing`, `incident`, and `refactor` are not active core modes. If present, they are legacy aliases or scenario guidance only.
 
@@ -51,9 +53,9 @@ Legacy names such as `planning`, `testing`, `incident`, and `refactor` are not a
 1. Read `.forge/forge.config.yaml`.
 2. Apply `run.interaction`, `workflow.default_mode`, and `policy.require_human_confirmation_for`.
 3. Resolve the requested core mode or compatibility/scenario guidance and read only that contract file.
-4. Read `.forge/context/00-meta/conventions.md` when task behavior, output shape, evidence handling, validation reporting, risk boundaries, or language rules need it.
+4. Read `.forge/runtime/meta/conventions.md` when task behavior, output shape, evidence handling, validation reporting, risk boundaries, or language rules need it.
 5. Load scoped convention files only when relevant to the task category.
-6. Use `.forge/context/00-meta/context-manifest.md` only as a routing index when navigation help is needed.
+6. Use `.forge/runtime/meta/context-manifest.md` only as a routing index when navigation help is needed.
 7. If `.forge/workspace.yaml` exists, treat it as a thin coordination layer for cross-repo planning only; it does not replace service-repo context.
 8. Load only the smallest relevant repository evidence and scoped `.forge/context` needed for the task.
 
@@ -130,4 +132,4 @@ Optional when GitHub Copilot is selected:
 .github/copilot-instructions.md
 ```
 
-Do not copy engine-only folders such as `docs/`, `specs/`, `validation-cases/`, `runtime/adapters/`, or `runtime/skills/` into every target repository.
+Do not copy engine-only folders such as `docs/`, `specs/`, `validation-cases/`, or `runtime/adapters/` into every target repository.
