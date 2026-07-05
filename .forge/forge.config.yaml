@@ -56,9 +56,9 @@ artifacts:
 tools:
   adapters:
     - codex
-    - claude
+    - copilot
   default_adapter: codex
   validation_commands: []
   package_targets:
     - codex
-    - claude
+    - copilot

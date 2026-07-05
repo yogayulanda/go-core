@@ -1,2 +1,24 @@
-.forge/temp/
-.forge/cache/
+# Forge local cache/scratch
+/cache/
+/temp/
+
+# Generated artifacts are local by default.
+# Keep README.md tracked so the directory exists and explains the policy.
+/generated/**
+!/generated/
+!/generated/README.md
+
+# Context patch proposals are local by default.
+# Force-add a specific patch if your team wants to review/commit it.
+/context-patches/**
+!/context-patches/
+!/context-patches/README.md
+
+# Migration/deprecated archives are local safety backups by default.
+# Force-add archive content only when your team intentionally wants migration history in git.
+/context-archive/**
+!/context-archive/
+!/context-archive/README.md
+
+# Local personal Forge config
+/forge.local.yaml
