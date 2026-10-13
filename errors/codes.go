@@ -47,6 +47,31 @@ var registry = struct {
 	messageProvider MessageProvider
 }{definitions: make(map[string]Def)}
 
+type RegistryState struct {
+	definitions     map[string]Def
+	messageProvider MessageProvider
+}
+
+func SnapshotRegistry() RegistryState {
+	registry.RLock()
+	defer registry.RUnlock()
+	definitions := make(map[string]Def, len(registry.definitions))
+	for code, definition := range registry.definitions {
+		definitions[code] = definition
+	}
+	return RegistryState{definitions: definitions, messageProvider: registry.messageProvider}
+}
+
+func RestoreRegistry(state RegistryState) {
+	registry.Lock()
+	defer registry.Unlock()
+	registry.definitions = make(map[string]Def, len(state.definitions))
+	for code, definition := range state.definitions {
+		registry.definitions[code] = definition
+	}
+	registry.messageProvider = state.messageProvider
+}
+
 func init() {
 	_ = Register(
 		Def{Code: "CORE-0000", Class: ClassSuccess, HTTPStatus: 200, GRPCCode: codes.OK, Finality: FinalityBusiness, DefaultMessage: "success"},

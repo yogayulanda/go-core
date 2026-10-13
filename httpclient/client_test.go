@@ -4,15 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/sony/gobreaker/v2"
+	"github.com/yogayulanda/go-core/coretest"
 	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/observability"
 	"github.com/yogayulanda/go-core/resilience"
@@ -121,17 +120,10 @@ func TestClient_CircuitBreakerDoesNotHideReceivedResponse(t *testing.T) {
 }
 
 func TestClient_ConnectionRefusedIsBeforeSend(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	address := listener.Addr().String()
-	if err := listener.Close(); err != nil {
-		t.Fatal(err)
-	}
+	address := coretest.RefusingAddr(t)
 	log, _ := logger.New("http-test", "error")
 	client := NewClient(log, WithoutTracing())
-	_, err = client.Get(context.Background(), "http://"+address)
+	_, err := client.Get(context.Background(), "http://"+address)
 	var transportErr *TransportError
 	if !errors.As(err, &transportErr) || transportErr.Phase != PhaseBeforeSend || transportErr.Kind != TransportKindConnection {
 		t.Fatalf("expected before-send connection error, got %#v", err)
@@ -139,14 +131,7 @@ func TestClient_ConnectionRefusedIsBeforeSend(t *testing.T) {
 }
 
 func TestClient_TimeoutAfterHeadersIsAfterSend(t *testing.T) {
-	release := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		<-release
-	}))
-	defer func() {
-		close(release)
-		server.Close()
-	}()
+	server := coretest.SilentServer(t)
 	log, _ := logger.New("http-test", "error")
 	client := NewClient(log, WithTimeout(200*time.Millisecond), WithoutTracing())
 	_, err := client.Get(context.Background(), server.URL)
@@ -157,23 +142,7 @@ func TestClient_TimeoutAfterHeadersIsAfterSend(t *testing.T) {
 }
 
 func TestClient_ConnectionClosedAfterHeadersIsAfterSend(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		hijacker, ok := w.(http.Hijacker)
-		if !ok {
-			http.Error(w, "hijacking unsupported", http.StatusInternalServerError)
-			return
-		}
-		connection, _, err := hijacker.Hijack()
-		if err != nil {
-			return
-		}
-		if _, err := fmt.Fprint(connection, "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\n"); err != nil {
-			_ = connection.Close()
-			return
-		}
-		_ = connection.Close()
-	}))
-	defer server.Close()
+	server := coretest.CloseAfterHeadersServer(t)
 	log, _ := logger.New("http-test", "error")
 	client := NewClient(log, WithoutTracing())
 	_, err := client.Get(context.Background(), server.URL)
@@ -182,25 +151,6 @@ func TestClient_ConnectionClosedAfterHeadersIsAfterSend(t *testing.T) {
 		t.Fatalf("expected after-send error, got %#v", err)
 	}
 }
-
-type capturedLogger struct {
-	mu       sync.Mutex
-	services []logger.ServiceLog
-}
-
-func (*capturedLogger) Info(context.Context, string, ...logger.Field)  {}
-func (*capturedLogger) Error(context.Context, string, ...logger.Field) {}
-func (*capturedLogger) Debug(context.Context, string, ...logger.Field) {}
-func (*capturedLogger) Warn(context.Context, string, ...logger.Field)  {}
-func (l *capturedLogger) LogService(_ context.Context, service logger.ServiceLog) {
-	l.mu.Lock()
-	l.services = append(l.services, service)
-	l.mu.Unlock()
-}
-func (*capturedLogger) LogDB(context.Context, logger.DBLog)                   {}
-func (*capturedLogger) LogEvent(context.Context, logger.EventLog)             {}
-func (*capturedLogger) LogTransaction(context.Context, logger.TransactionLog) {}
-func (l *capturedLogger) WithComponent(string) logger.Logger                  { return l }
 
 func TestClient_IdentityPropagationAndOneSanitizedLog(t *testing.T) {
 	if err := observability.RegisterPropagatedLabel("httpclient_test_label"); err != nil {
@@ -216,9 +166,12 @@ func TestClient_IdentityPropagationAndOneSanitizedLog(t *testing.T) {
 	ctx = observability.WithRequestID(ctx, "req-http-client")
 	_ = observability.SetUserID(ctx, "user-42")
 	_ = observability.SetLabel(ctx, "httpclient_test_label", "propagated")
-	recorder := &capturedLogger{}
+	recorder, err := coretest.NewRecordingLogger()
+	if err != nil {
+		t.Fatal(err)
+	}
 	client := NewClient(recorder, WithoutTracing())
-	_, err := client.Get(ctx, server.URL+"/resource?token=secret")
+	_, err = client.Get(ctx, server.URL+"/resource?token=secret")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,16 +186,18 @@ func TestClient_IdentityPropagationAndOneSanitizedLog(t *testing.T) {
 	if headers[1].Get("X-Request-ID") != "req-http-client" || headers[1].Get("X-User-ID") != "user-42" || headers[1].Get("X-Label-httpclient_test_label") != "propagated" {
 		t.Fatalf("internal request missing identity headers: %#v", headers[1])
 	}
-	if len(recorder.services) != 2 {
-		t.Fatalf("expected one service log per call, got %d", len(recorder.services))
+	entries := recorder.Find("httpclient_call")
+	if len(entries) != 2 {
+		t.Fatalf("expected one service log per call, got %d", len(entries))
 	}
-	for _, service := range recorder.services {
-		loggedURL, _ := service.Metadata["url"].(string)
+	for _, entry := range entries {
+		metadata, _ := entry.Fields["app.metadata"].(map[string]any)
+		loggedURL, _ := metadata["url"].(string)
 		if strings.Contains(loggedURL, "token=") || strings.Contains(loggedURL, "secret") || loggedURL != server.URL+"/resource" {
 			t.Fatalf("request URL was not sanitized: %q", loggedURL)
 		}
-		if service.Status != "success" {
-			t.Fatalf("unexpected call status: %q", service.Status)
+		if entry.Fields["app.status"] != "success" {
+			t.Fatalf("unexpected call status: %q", entry.Fields["app.status"])
 		}
 	}
 }
@@ -253,14 +208,21 @@ func TestClient_BodyLoggingRequiresAndUsesMasker(t *testing.T) {
 		_, _ = w.Write([]byte(secret))
 	}))
 	defer server.Close()
-	recorder := &capturedLogger{}
-	masker := func([]byte) []byte { return []byte("[masked]") }
-	client := NewClient(recorder, WithBodyLogging(masker), WithoutTracing())
-	_, err := client.Post(context.Background(), server.URL, map[string]string{"secret": secret})
+	recorder, err := coretest.NewRecordingLogger()
 	if err != nil {
 		t.Fatal(err)
 	}
-	metadata := recorder.services[0].Metadata
+	masker := func([]byte) []byte { return []byte("[masked]") }
+	client := NewClient(recorder, WithBodyLogging(masker), WithoutTracing())
+	_, err = client.Post(context.Background(), server.URL, map[string]string{"secret": secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := recorder.Find("httpclient_call")
+	if len(entries) != 1 {
+		t.Fatalf("expected one HTTP client log, got %d", len(entries))
+	}
+	metadata, _ := entries[0].Fields["app.metadata"].(map[string]any)
 	if metadata["request_body"] != "[masked]" || metadata["response_body"] != "[masked]" {
 		t.Fatalf("body mask was not applied: %#v", metadata)
 	}
