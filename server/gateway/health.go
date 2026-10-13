@@ -8,11 +8,13 @@ import (
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/segmentio/kafka-go"
 
 	"github.com/yogayulanda/go-core/app"
 	"github.com/yogayulanda/go-core/cache"
 	"github.com/yogayulanda/go-core/config"
 	"github.com/yogayulanda/go-core/database"
+	"github.com/yogayulanda/go-core/messaging"
 )
 
 type sqlPinger interface {
@@ -40,6 +42,14 @@ const (
 )
 
 func registerHealthEndpoints(mux *runtime.ServeMux, application *app.App) error {
+	var kafkaDialer *kafka.Dialer
+	if application.Config().Kafka.Enabled {
+		var err error
+		kafkaDialer, err = messaging.NewKafkaDialer(application.Config().Kafka)
+		if err != nil {
+			return err
+		}
+	}
 	if err := mux.HandlePath("GET", "/health", func(w http.ResponseWriter, r *http.Request, _ map[string]string) {
 		writeHealthOK(w)
 	}); err != nil {
@@ -57,7 +67,9 @@ func registerHealthEndpoints(mux *runtime.ServeMux, application *app.App) error 
 			toSQLPingers(application.SQLAll()),
 			application.RedisCache(),
 			application.MemcachedCache(),
-			isKafkaReady,
+			func(ctx context.Context, brokers []string) bool {
+				return isKafkaReadyWithDialer(ctx, kafkaDialer, brokers)
+			},
 		)
 		if !ok {
 			writeJSON(w, http.StatusServiceUnavailable, report)
@@ -201,6 +213,22 @@ func isKafkaReady(ctx context.Context, brokers []string) bool {
 		return true
 	}
 
+	return false
+}
+
+func isKafkaReadyWithDialer(ctx context.Context, dialer *kafka.Dialer, brokers []string) bool {
+	if len(brokers) == 0 || dialer == nil {
+		return false
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	for _, broker := range brokers {
+		connection, err := dialer.DialContext(checkCtx, "tcp", broker)
+		if err == nil {
+			_ = connection.Close()
+			return true
+		}
+	}
 	return false
 }
 

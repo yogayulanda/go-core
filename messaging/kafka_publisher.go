@@ -10,6 +10,7 @@ import (
 	"github.com/segmentio/kafka-go"
 	"github.com/yogayulanda/go-core/config"
 	corelogger "github.com/yogayulanda/go-core/logger"
+	"github.com/yogayulanda/go-core/observability"
 )
 
 var ErrPublisherClosed = errors.New("publisher already closed")
@@ -39,7 +40,14 @@ func NewKafkaPublisher(
 	cfg config.KafkaConfig,
 	opts ...PublisherOption,
 ) (Publisher, error) {
+	transport, err := buildKafkaTransport(cfg)
+	if err != nil {
+		return nil, err
+	}
 	writer := newKafkaWriter(cfg)
+	if concreteWriter, ok := writer.(*kafka.Writer); ok {
+		concreteWriter.Transport = transport
+	}
 
 	conf := publisherConfig{}
 
@@ -61,6 +69,7 @@ func (k *kafkaPublisher) Publish(ctx context.Context, msg Message) error {
 		return ErrPublisherClosed
 	}
 	startedAt := time.Now()
+	msg = withOutgoingIdentity(ctx, msg)
 
 	kMsg := kafka.Message{
 		Topic: msg.Topic,
@@ -87,10 +96,17 @@ func (k *kafkaPublisher) Publish(ctx context.Context, msg Message) error {
 
 	// DLQ
 	if err != nil && k.cfg.dlqEnabled {
+		dlqHeaders := make(map[string]string, len(msg.Headers)+2)
+		for key, value := range msg.Headers {
+			dlqHeaders[key] = value
+		}
+		dlqHeaders["x-dlq-reason"] = err.Error()
+		dlqHeaders["x-original-topic"] = msg.Topic
 		dlqMsg := kafka.Message{
-			Topic: msg.Topic + ".dlq",
-			Key:   msg.Key,
-			Value: msg.Payload,
+			Topic:   msg.Topic + ".dlq",
+			Key:     msg.Key,
+			Value:   msg.Payload,
+			Headers: kafkaHeaders(dlqHeaders),
 		}
 
 		dlqErr := k.writer.WriteMessages(ctx, dlqMsg)
@@ -132,6 +148,38 @@ func (k *kafkaPublisher) Publish(ctx context.Context, msg Message) error {
 	}
 
 	return err
+}
+
+func kafkaHeaders(headers map[string]string) []kafka.Header {
+	out := make([]kafka.Header, 0, len(headers))
+	for key, value := range headers {
+		out = append(out, kafka.Header{Key: key, Value: []byte(value)})
+	}
+	return out
+}
+
+func withOutgoingIdentity(ctx context.Context, msg Message) Message {
+	if msg.Headers == nil {
+		msg.Headers = make(map[string]string)
+	} else {
+		headers := make(map[string]string, len(msg.Headers))
+		for key, value := range msg.Headers {
+			headers[key] = value
+		}
+		msg.Headers = headers
+	}
+	setIfMissing := func(key, value string) {
+		if value != "" && msg.Headers[key] == "" {
+			msg.Headers[key] = value
+		}
+	}
+	setIfMissing("x-request-id", observability.GetRequestID(ctx))
+	setIfMissing("x-user-id", observability.GetUserID(ctx))
+	labels := observability.Labels(ctx)
+	for _, name := range observability.PropagatedLabels() {
+		setIfMissing(observability.LabelMetadataPrefix+name, labels[name])
+	}
+	return msg
 }
 
 func (k *kafkaPublisher) Close() error {

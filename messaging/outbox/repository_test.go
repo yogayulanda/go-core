@@ -21,14 +21,14 @@ func TestBuildInsertPendingQuery_MySQL_UsesQuestionPlaceholders(t *testing.T) {
 		time.Unix(0, 0),
 	)
 
-	if !strings.Contains(query, "`key`") {
-		t.Fatalf("expected mysql key quoting, query: %s", query)
+	if !strings.Contains(query, "msg_key") || !strings.Contains(query, "event_id") {
+		t.Fatalf("expected mysql event ID and message key columns, query: %s", query)
 	}
-	if !strings.Contains(query, "VALUES (?, ?, ?, ?, ?, ?, ?)") {
+	if !strings.Contains(query, "VALUES (?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)") {
 		t.Fatalf("expected mysql placeholders, query: %s", query)
 	}
-	if len(args) != 7 {
-		t.Fatalf("expected 7 args, got %d", len(args))
+	if len(args) != 8 {
+		t.Fatalf("expected 8 args, got %d", len(args))
 	}
 }
 
@@ -56,10 +56,10 @@ func TestBuildInsertPendingQuery_SQLServer_UsesPPlaceholders(t *testing.T) {
 		time.Unix(0, 0),
 	)
 
-	if !strings.Contains(query, "[key]") {
-		t.Fatalf("expected sqlserver key quoting, query: %s", query)
+	if !strings.Contains(query, "msg_key") || !strings.Contains(query, "event_id") {
+		t.Fatalf("expected SQL Server event ID and message key columns, query: %s", query)
 	}
-	if !strings.Contains(query, "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7)") {
+	if !strings.Contains(query, "VALUES (@p1, @p2, @p3, @p4, @p5, @p6, 0, NULL, @p7, @p7)") {
 		t.Fatalf("expected sqlserver placeholders, query: %s", query)
 	}
 	if len(args) != 7 {

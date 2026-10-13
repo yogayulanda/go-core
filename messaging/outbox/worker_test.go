@@ -39,8 +39,12 @@ func TestBuildSelectPendingQuery_ByDriver(t *testing.T) {
 			if !strings.Contains(query, tt.wantContain) {
 				t.Fatalf("query does not contain expected fragment: %s", query)
 			}
-			if len(args) != 1 {
-				t.Fatalf("expected 1 arg, got %d", len(args))
+			wantArgs := 2
+			if tt.driver == "mysql" {
+				wantArgs = 3
+			}
+			if len(args) != wantArgs {
+				t.Fatalf("expected %d args, got %d", wantArgs, len(args))
 			}
 		})
 	}
@@ -180,7 +184,7 @@ func TestWorkerRunOnce_EmptyBatch_EmitsMetric(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT (.+) FROM outbox_events").WillReturnRows(
-		sqlmock.NewRows([]string{"id", "topic", "key", "payload", "headers"}),
+		sqlmock.NewRows([]string{"id", "event_id", "topic", "msg_key", "payload", "headers", "attempt"}),
 	)
 	mock.ExpectRollback()
 
@@ -213,11 +217,12 @@ func TestWorkerRunOnce_SuccessBatch_EmitsMetric(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT (.+) FROM outbox_events").WillReturnRows(
-		sqlmock.NewRows([]string{"id", "topic", "key", "payload", "headers"}).
-			AddRow(int64(1), "record.created", []byte("k"), []byte("payload"), []byte(`{"content-type":"application/json"}`)),
+		sqlmock.NewRows([]string{"id", "event_id", "topic", "msg_key", "payload", "headers", "attempt"}).
+			AddRow(int64(1), "event-1", "record.created", []byte("k"), []byte("payload"), []byte(`{"content-type":"application/json"}`), 0),
 	)
-	mock.ExpectExec("UPDATE outbox_events SET published_at").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE outbox_events SET status = 'PROCESSING'").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
+	mock.ExpectExec("UPDATE outbox_events SET status = 'SENT'").WillReturnResult(sqlmock.NewResult(0, 1))
 
 	metrics := observability.NewMetrics()
 	w := NewWorkerWithOptions(
@@ -247,6 +252,57 @@ func (failingPublisher) Publish(ctx context.Context, msg messaging.Message) erro
 
 func (failingPublisher) Close() error { return nil }
 
+type perKeyPublisher struct {
+	calls []string
+}
+
+func (p *perKeyPublisher) Publish(_ context.Context, message messaging.Message) error {
+	p.calls = append(p.calls, message.EventID)
+	if message.EventID == "event-fail" {
+		return errors.New("broker unavailable")
+	}
+	return nil
+}
+
+func (*perKeyPublisher) Close() error { return nil }
+
+func TestWorkerRunOnce_PublishFailureDoesNotBlockOtherKey(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT (.+) FROM outbox_events").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "event_id", "topic", "msg_key", "payload", "headers", "attempt"}).
+			AddRow(int64(1), "event-fail", "audit", []byte("key-a"), []byte("secret-payload"), []byte(`{}`), 0).
+			AddRow(int64(2), "event-ok", "audit", []byte("key-b"), []byte("other-payload"), []byte(`{}`), 0),
+	)
+	mock.ExpectExec("UPDATE outbox_events SET status = 'PROCESSING'").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE outbox_events SET status = 'PROCESSING'").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	mock.ExpectExec(`UPDATE outbox_events SET status = \?`).WithArgs("PENDING", 1, "broker unavailable", sqlmock.AnyArg(), int64(1)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE outbox_events SET status = 'SENT'").WithArgs(int64(2)).WillReturnResult(sqlmock.NewResult(0, 1))
+	publisher := &perKeyPublisher{}
+	worker := NewWorkerWithOptions(db, publisher, stubLogger{}, WithWorkerDriver("mysql"))
+	if err := worker.RunOnce(context.Background()); err == nil {
+		t.Fatal("expected a joined publish error")
+	}
+	if len(publisher.calls) != 2 || publisher.calls[0] != "event-fail" || publisher.calls[1] != "event-ok" {
+		t.Fatalf("worker stopped after one key failed: calls=%v", publisher.calls)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBuildMarkFailedQueryMovesEventToDeadAtAttemptLimit(t *testing.T) {
+	query, args := buildMarkFailedQuery("mysql", 7, 3, 3, "failure", time.Now())
+	if !strings.Contains(query, "status = ?") || args[0] != "DEAD" || args[1] != 3 {
+		t.Fatalf("attempt limit did not make the event DEAD: query=%s args=%v", query, args)
+	}
+}
+
 func TestWorkerRunOnce_PublishFailure_ReturnsError(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -256,10 +312,12 @@ func TestWorkerRunOnce_PublishFailure_ReturnsError(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT (.+) FROM outbox_events").WillReturnRows(
-		sqlmock.NewRows([]string{"id", "topic", "key", "payload", "headers"}).
-			AddRow(int64(1), "record.created", []byte("k"), []byte("payload"), []byte(`{}`)),
+		sqlmock.NewRows([]string{"id", "event_id", "topic", "msg_key", "payload", "headers", "attempt"}).
+			AddRow(int64(1), "event-1", "record.created", []byte("k"), []byte("payload"), []byte(`{}`), 0),
 	)
-	mock.ExpectRollback()
+	mock.ExpectExec("UPDATE outbox_events SET status = 'PROCESSING'").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	mock.ExpectExec("UPDATE outbox_events SET status = ?").WithArgs("PENDING", 1, "publish failed", sqlmock.AnyArg(), int64(1)).WillReturnResult(sqlmock.NewResult(0, 1))
 
 	metrics := observability.NewMetrics()
 	w := NewWorkerWithOptions(
@@ -273,8 +331,8 @@ func TestWorkerRunOnce_PublishFailure_ReturnsError(t *testing.T) {
 	if err := w.RunOnce(context.Background()); err == nil {
 		t.Fatalf("expected publish failure")
 	}
-	if got := testutil.ToFloat64(metrics.OutboxBatchTotal.WithLabelValues("outbox-failure-test", "failed")); got != 1 {
-		t.Fatalf("expected failed batch count 1, got %v", got)
+	if got := testutil.ToFloat64(metrics.OutboxBatchTotal.WithLabelValues("outbox-failure-test", "partial_failure")); got != 1 {
+		t.Fatalf("expected partial failure batch count 1, got %v", got)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sql expectations not met: %v", err)
@@ -290,10 +348,10 @@ func TestWorkerRunOnce_CommitFailure_ReturnsError(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT (.+) FROM outbox_events").WillReturnRows(
-		sqlmock.NewRows([]string{"id", "topic", "key", "payload", "headers"}).
-			AddRow(int64(1), "record.created", []byte("k"), []byte("payload"), []byte(`{}`)),
+		sqlmock.NewRows([]string{"id", "event_id", "topic", "msg_key", "payload", "headers", "attempt"}).
+			AddRow(int64(1), "event-1", "record.created", []byte("k"), []byte("payload"), []byte(`{}`), 0),
 	)
-	mock.ExpectExec("UPDATE outbox_events SET published_at").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE outbox_events SET status = 'PROCESSING'").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
 
 	metrics := observability.NewMetrics()

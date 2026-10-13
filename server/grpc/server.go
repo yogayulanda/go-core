@@ -12,19 +12,22 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 
+	"github.com/segmentio/kafka-go"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc/grpclog"
 
 	"github.com/yogayulanda/go-core/app"
 	"github.com/yogayulanda/go-core/logger"
+	"github.com/yogayulanda/go-core/messaging"
 	"github.com/yogayulanda/go-core/security"
 )
 
 type Server struct {
-	server *grpc.Server
-	lis    net.Listener
-	app    *app.App
-	health *health.Server
+	server      *grpc.Server
+	lis         net.Listener
+	app         *app.App
+	health      *health.Server
+	kafkaDialer *kafka.Dialer
 }
 
 func (s *Server) Name() string {
@@ -47,6 +50,14 @@ func New(application *app.App) (*Server, error) {
 
 	log := application.Logger()
 	grpclog.SetLoggerV2(logger.NewGRPCLoggerV2(log))
+	var kafkaDialer *kafka.Dialer
+	if cfg.Kafka.Enabled {
+		var err error
+		kafkaDialer, err = messaging.NewKafkaDialer(cfg.Kafka)
+		if err != nil {
+			return nil, fmt.Errorf("init Kafka health dialer failed: %w", err)
+		}
+	}
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPC.Port))
 	if err != nil {
@@ -105,10 +116,11 @@ func New(application *app.App) (*Server, error) {
 	})
 
 	s := &Server{
-		server: server,
-		lis:    lis,
-		app:    application,
-		health: healthServer,
+		server:      server,
+		lis:         lis,
+		app:         application,
+		health:      healthServer,
+		kafkaDialer: kafkaDialer,
 	}
 
 	application.RegisterServerShutdown("grpc_server", func(ctx context.Context) error {
@@ -152,7 +164,7 @@ func (s *Server) monitorHealth(ctx context.Context) {
 			s.health.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
 		} else {
 			checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-			ready := grpcDependenciesReady(checkCtx, s.app)
+			ready := grpcDependenciesReady(checkCtx, s.app, s.kafkaDialer)
 			cancel()
 			if ready && !s.app.IsDraining() {
 				s.health.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
@@ -168,7 +180,7 @@ func (s *Server) monitorHealth(ctx context.Context) {
 	}
 }
 
-func grpcDependenciesReady(ctx context.Context, application *app.App) bool {
+func grpcDependenciesReady(ctx context.Context, application *app.App, kafkaDialer *kafka.Dialer) bool {
 	cfg := application.Config()
 	for name, databaseConfig := range cfg.Databases {
 		if !databaseConfig.Required {
@@ -193,9 +205,11 @@ func grpcDependenciesReady(ctx context.Context, application *app.App) bool {
 	}
 	if cfg.Kafka.Enabled {
 		ready := false
-		dialer := &net.Dialer{Timeout: 250 * time.Millisecond}
+		if kafkaDialer == nil {
+			return false
+		}
 		for _, broker := range cfg.Kafka.Brokers {
-			connection, err := dialer.DialContext(ctx, "tcp", broker)
+			connection, err := kafkaDialer.DialContext(ctx, "tcp", broker)
 			if err == nil {
 				_ = connection.Close()
 				ready = true

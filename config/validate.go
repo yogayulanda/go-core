@@ -92,12 +92,23 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 	if c.Kafka.Enabled && len(c.Kafka.Brokers) == 0 {
 		issues = append(issues, issue("kafka", "KAFKA_BROKERS", "KAFKA_BROKERS must not be empty when Kafka is enabled"))
 	}
-	if c.Kafka.Username != "" {
-		switch c.Kafka.SASLMechanism {
+	kafkaUsername := strings.TrimSpace(c.Kafka.Username)
+	kafkaPassword := strings.TrimSpace(c.Kafka.Password)
+	kafkaMechanism := strings.ToUpper(strings.TrimSpace(c.Kafka.SASLMechanism))
+	if kafkaUsername != "" {
+		if kafkaPassword == "" {
+			issues = append(issues, issue("kafka", "KAFKA_PASSWORD", "KAFKA_PASSWORD is required when KAFKA_USERNAME is set"))
+		}
+		switch kafkaMechanism {
 		case "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512":
 		default:
 			issues = append(issues, issue("kafka", "KAFKA_SASL_MECHANISM", "KAFKA_SASL_MECHANISM must be PLAIN, SCRAM-SHA-256, or SCRAM-SHA-512 when KAFKA_USERNAME is set"))
 		}
+	} else if kafkaPassword != "" || kafkaMechanism != "" {
+		issues = append(issues, issue("kafka", "KAFKA_USERNAME", "KAFKA_USERNAME is required when SASL credentials or mechanism are set"))
+	}
+	if c.Kafka.JksPassword != "" && strings.TrimSpace(c.Kafka.JksFile) == "" {
+		issues = append(issues, issue("kafka", "KAFKA_JKS_FILE", "KAFKA_JKS_FILE is required when KAFKA_JKS_PASSWORD is set"))
 	}
 
 	if c.Observability.OTLPInsecure && strings.TrimSpace(c.Observability.OTLPCACertFile) != "" {

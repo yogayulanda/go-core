@@ -1,6 +1,58 @@
 # Messaging Pattern
 
+## Transactional Outbox Schema
+
+The outbox row ID is a database identity used for ordering; `event_id` is the UUID deduplication key. The worker leases eligible rows per message key, publishes outside the claim transaction, and records `SENT`, retry state, or `DEAD` independently per event. A `DEAD` row blocks later rows with the same key until operationally resolved.
+
+SQL Server:
+
+```sql
+CREATE TABLE dbo.outbox_events (
+	id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+	event_id NVARCHAR(36) NOT NULL UNIQUE,
+	topic NVARCHAR(255) NOT NULL,
+	msg_key VARBINARY(512) NOT NULL,
+	payload VARBINARY(MAX) NOT NULL,
+	headers NVARCHAR(MAX) NOT NULL,
+	status NVARCHAR(16) NOT NULL,
+	attempt INT NOT NULL CONSTRAINT DF_outbox_attempt DEFAULT 0,
+	last_error NVARCHAR(MAX) NULL,
+	available_at DATETIME2(6) NOT NULL,
+	locked_until DATETIME2(6) NULL,
+	created_at DATETIME2(6) NOT NULL,
+	sent_at DATETIME2(6) NULL
+);
+CREATE INDEX outbox_claim_idx ON dbo.outbox_events (status, available_at, locked_until, id);
+CREATE INDEX outbox_key_order_idx ON dbo.outbox_events (msg_key, id, status);
+```
+
+MySQL:
+
+```sql
+CREATE TABLE outbox_events (
+	id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+	event_id VARCHAR(36) NOT NULL UNIQUE,
+	topic VARCHAR(255) NOT NULL,
+	msg_key VARBINARY(512) NOT NULL,
+	payload LONGBLOB NOT NULL,
+	headers JSON NOT NULL,
+	status VARCHAR(16) NOT NULL,
+	attempt INT NOT NULL DEFAULT 0,
+	last_error TEXT NULL,
+	available_at DATETIME(6) NOT NULL,
+	locked_until DATETIME(6) NULL,
+	created_at DATETIME(6) NOT NULL,
+	sent_at DATETIME(6) NULL,
+	INDEX outbox_claim_idx (status, available_at, locked_until, id),
+	INDEX outbox_key_order_idx (msg_key, id, status)
+);
+```
+
+Matching test fixtures are maintained at `messaging/outbox/testdata/schema_sqlserver.sql` and `messaging/outbox/testdata/schema_mysql.sql`.
+
 Use this document as the canonical messaging and outbox consumption pattern for services using `go-core`.
+
+Kafka authentication is configured with `KAFKA_USERNAME`, `KAFKA_PASSWORD`, and `KAFKA_SASL_MECHANISM` (`PLAIN`, `SCRAM-SHA-256`, or `SCRAM-SHA-512`). `KAFKA_JKS_FILE` accepts either a JKS truststore/keystore or a PEM bundle; `KAFKA_JKS_PASSWORD` is used for JKS files. Producer, consumer, and readiness checks share the same configuration.
 
 ## When To Use Direct Publisher
 

@@ -38,6 +38,30 @@ func TestValidate_InternalJWTNegativeLeeway(t *testing.T) {
 	}
 }
 
+func TestValidate_KafkaSASLAndJKSRequirements(t *testing.T) {
+	base := Config{App: AppConfig{ServiceName: "svc", Environment: "dev", ShutdownTimeout: 25 * time.Second}}
+	tests := []struct {
+		name   string
+		kafka  KafkaConfig
+		failed string
+	}{
+		{name: "username requires password", kafka: KafkaConfig{Username: "user", SASLMechanism: "PLAIN"}, failed: "KAFKA_PASSWORD"},
+		{name: "username requires supported mechanism", kafka: KafkaConfig{Username: "user", Password: "secret", SASLMechanism: "UNKNOWN"}, failed: "KAFKA_SASL_MECHANISM"},
+		{name: "mechanism requires username", kafka: KafkaConfig{Password: "secret", SASLMechanism: "PLAIN"}, failed: "KAFKA_USERNAME"},
+		{name: "JKS password requires file", kafka: KafkaConfig{JksPassword: "secret"}, failed: "KAFKA_JKS_FILE"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := base
+			cfg.Kafka = test.kafka
+			err := cfg.Validate()
+			if err == nil || !strings.Contains(err.Error(), test.failed) {
+				t.Fatalf("expected %s validation error, got %v", test.failed, err)
+			}
+		})
+	}
+}
+
 func TestValidate_InternalJWTIncludeExcludeConflict(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{

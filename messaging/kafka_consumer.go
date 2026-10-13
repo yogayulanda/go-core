@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/segmentio/kafka-go"
 	"github.com/yogayulanda/go-core/config"
 	corelogger "github.com/yogayulanda/go-core/logger"
+	"github.com/yogayulanda/go-core/observability"
 )
 
 type kafkaMessageReader interface {
@@ -18,7 +20,45 @@ type kafkaMessageReader interface {
 	Close() error
 }
 
-var newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string, errorLogger *log.Logger) kafkaMessageReader {
+func restoreIncomingIdentity(ctx context.Context, headers map[string]string) context.Context {
+	ctx = observability.EnsureFieldBag(ctx)
+	if requestID := headers["x-request-id"]; requestID != "" {
+		ctx = observability.WithRequestID(ctx, requestID)
+	} else {
+		ctx = observability.WithRequestID(ctx, observability.GenerateRequestID())
+	}
+	observability.RestoreIncomingIdentity(ctx, headers["x-user-id"], propagatedLabelsFromHeaders(headers))
+	return withCloudEventAttributes(ctx, headers)
+}
+
+func propagatedLabelsFromHeaders(headers map[string]string) map[string]string {
+	labels := make(map[string]string)
+	for _, name := range observability.PropagatedLabels() {
+		if value := headers[observability.LabelMetadataPrefix+name]; value != "" {
+			labels[name] = value
+		}
+	}
+	return labels
+}
+
+func withCloudEventAttributes(ctx context.Context, headers map[string]string) context.Context {
+	if headers["ce_specversion"] == "" && headers["ce_id"] == "" && headers["ce_type"] == "" {
+		return ctx
+	}
+	eventTime, _ := time.Parse(time.RFC3339Nano, headers["ce_time"])
+	attributes := CloudEventAttributes{
+		SpecVersion: headers["ce_specversion"],
+		ID:          headers["ce_id"],
+		Type:        headers["ce_type"],
+		Source:      headers["ce_source"],
+		Time:        eventTime,
+		Subject:     headers["ce_subject"],
+		Sequence:    strings.TrimSpace(headers["ce_sequence"]),
+	}
+	return context.WithValue(ctx, cloudEventContextKey{}, attributes)
+}
+
+var newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string, errorLogger *log.Logger, dialer *kafka.Dialer) kafkaMessageReader {
 	return kafka.NewReader(kafka.ReaderConfig{
 		Brokers:        cfg.Brokers,
 		Topic:          topic,
@@ -27,6 +67,7 @@ var newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string, 
 		MaxBytes:       10e6,
 		CommitInterval: 0, // manual commit
 		ErrorLogger:    errorLogger,
+		Dialer:         dialer,
 	})
 }
 
@@ -70,7 +111,11 @@ func NewKafkaConsumer(
 	if conf.log != nil {
 		errorLogger = corelogger.NewKafkaErrorLogger(conf.log)
 	}
-	reader := newKafkaReader(cfg, topic, groupID, errorLogger)
+	dialer, err := buildKafkaDialer(cfg)
+	if err != nil {
+		return nil, err
+	}
+	reader := newKafkaReader(cfg, topic, groupID, errorLogger, dialer)
 
 	return &kafkaConsumer{
 		reader:  reader,
@@ -82,21 +127,29 @@ func NewKafkaConsumer(
 }
 
 func (k *kafkaConsumer) Start(ctx context.Context) error {
-
-	msgChan := make(chan kafka.Message)
+	workerCount := k.cfg.workerCount
+	if workerCount < 1 {
+		workerCount = 1
+	}
+	messageQueues := make([]chan kafka.Message, workerCount)
 
 	// ==============================
 	// Worker Pool
 	// ==============================
 
-	for i := 0; i < k.cfg.workerCount; i++ {
-
+	for i := 0; i < workerCount; i++ {
+		messageQueues[i] = make(chan kafka.Message, 100)
+		messages := messageQueues[i]
 		k.wg.Add(1)
 
 		go func() {
 			defer k.wg.Done()
+			partitionBlocked := false
 
-			for m := range msgChan {
+			for m := range messages {
+				if partitionBlocked {
+					continue
+				}
 				processStartedAt := time.Now()
 
 				msg := Message{
@@ -109,6 +162,7 @@ func (k *kafkaConsumer) Start(ctx context.Context) error {
 				for _, h := range m.Headers {
 					msg.Headers[h.Key] = string(h.Value)
 				}
+				ctx := restoreIncomingIdentity(ctx, msg.Headers)
 
 				var err error
 				shouldCommit := false
@@ -131,7 +185,6 @@ func (k *kafkaConsumer) Start(ctx context.Context) error {
 				if err != nil && ctx.Err() != nil {
 					return
 				}
-
 				if err == nil {
 					shouldCommit = true
 					finalStatus = "success"
@@ -150,10 +203,14 @@ func (k *kafkaConsumer) Start(ctx context.Context) error {
 						Payload: msg.Payload,
 						Headers: msg.Headers,
 					}
+					dlqMsg.Headers = cloneMessageHeaders(msg.Headers)
+					dlqMsg.Headers["x-dlq-reason"] = err.Error()
+					dlqMsg.Headers["x-original-topic"] = msg.Topic
 
 					dlqErr := k.cfg.dlqPublisher.Publish(ctx, dlqMsg)
 
 					if dlqErr != nil {
+						partitionBlocked = true
 						finalStatus = "dlq_failed"
 						finalErrorCode = "dlq_publish_failed"
 						finalMetadata["error"] = dlqErr.Error()
@@ -172,6 +229,9 @@ func (k *kafkaConsumer) Start(ctx context.Context) error {
 					err = nil
 					shouldCommit = true
 				}
+				if err != nil && !shouldCommit {
+					partitionBlocked = true
+				}
 
 				// ==============================
 				// Commit ONLY if success OR DLQ success
@@ -179,6 +239,7 @@ func (k *kafkaConsumer) Start(ctx context.Context) error {
 
 				if shouldCommit {
 					if commitErr := k.reader.CommitMessages(ctx, m); commitErr != nil {
+						partitionBlocked = true
 						observeMessageConsume(k.cfg, msg.Topic, k.groupID, "commit_failed")
 						logMessageConsume(ctx, k.cfg, "failed", "commit_failed", map[string]interface{}{
 							"topic": msg.Topic,
@@ -222,7 +283,9 @@ func (k *kafkaConsumer) Start(ctx context.Context) error {
 
 			// If shutdown
 			if ctx.Err() != nil {
-				close(msgChan)
+				for _, queue := range messageQueues {
+					close(queue)
+				}
 				k.wg.Wait()
 				return nil
 			}
@@ -240,13 +303,30 @@ func (k *kafkaConsumer) Start(ctx context.Context) error {
 		}
 
 		select {
-		case msgChan <- m:
+		case messageQueues[partitionWorker(m.Partition, workerCount)] <- m:
 		case <-ctx.Done():
-			close(msgChan)
+			for _, queue := range messageQueues {
+				close(queue)
+			}
 			k.wg.Wait()
 			return nil
 		}
 	}
+}
+
+func cloneMessageHeaders(headers map[string]string) map[string]string {
+	copyOfHeaders := make(map[string]string, len(headers))
+	for key, value := range headers {
+		copyOfHeaders[key] = value
+	}
+	return copyOfHeaders
+}
+
+func partitionWorker(partition, workerCount int) int {
+	if partition < 0 {
+		partition = -partition
+	}
+	return partition % workerCount
 }
 
 func (k *kafkaConsumer) Close() error {

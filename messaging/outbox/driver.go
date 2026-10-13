@@ -12,14 +12,3 @@ func normalizeDriver(driver string) string {
 		return ""
 	}
 }
-
-func keyColumnByDriver(driver string) string {
-	switch normalizeDriver(driver) {
-	case "sqlserver":
-		return "[key]"
-	case "mysql":
-		return "`key`"
-	default:
-		return ""
-	}
-}
