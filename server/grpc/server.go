@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"google.golang.org/grpc/grpclog"
 
 	"github.com/yogayulanda/go-core/app"
 	"github.com/yogayulanda/go-core/logger"
@@ -42,6 +43,7 @@ func New(application *app.App) (*Server, error) {
 	}
 
 	log := application.Logger()
+	grpclog.SetLoggerV2(logger.NewGRPCLoggerV2(log))
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPC.Port))
 	if err != nil {
@@ -71,8 +73,8 @@ func New(application *app.App) (*Server, error) {
 		grpc.ChainUnaryInterceptor(
 			recoveryInterceptor(log),
 			requestIDInterceptor(),
-			authInterceptorWithLogger(authVerifier, log),
 			loggingInterceptor(application),
+			authInterceptorWithLogger(authVerifier, log),
 			metricsInterceptor(application),
 		),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),

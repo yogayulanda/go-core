@@ -54,6 +54,12 @@ func TestLoad_MigrationDefaultsAreExplicit(t *testing.T) {
 	if cfg.Migration.LockKey != "svc" {
 		t.Fatalf("expected migration lock key to default to service name, got %q", cfg.Migration.LockKey)
 	}
+	if cfg.Log.RequestStart || cfg.Log.SlowQueryThreshold != time.Second || cfg.Log.SlowRequestThreshold != 3*time.Second {
+		t.Fatalf("unexpected log defaults: %+v", cfg.Log)
+	}
+	if len(cfg.Log.MaskKeys) == 0 {
+		t.Fatal("expected default log mask keys")
+	}
 }
 
 func TestLoad_ActiveEnvironmentVariablesMapToConfig(t *testing.T) {

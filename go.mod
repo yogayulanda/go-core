@@ -15,6 +15,7 @@ require (
 	github.com/redis/go-redis/v9 v9.17.3
 	github.com/segmentio/kafka-go v0.4.50
 	github.com/sony/gobreaker/v2 v2.4.0
+	go.elastic.co/ecszap v1.0.3
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.65.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.65.0
 	go.opentelemetry.io/otel v1.40.0
@@ -28,6 +29,10 @@ require (
 	google.golang.org/protobuf v1.36.11
 	gorm.io/driver/sqlserver v1.6.3
 	gorm.io/gorm v1.31.1
+)
+
+require (
+	github.com/pkg/errors v0.9.1 // indirect
 )
 
 require (

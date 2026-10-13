@@ -2,21 +2,35 @@ package logger
 
 import (
 	"context"
+	"io"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/yogayulanda/go-core/observability"
+	"github.com/yogayulanda/go-core/version"
+	"go.elastic.co/ecszap"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 type zapLogger struct {
-	l *zap.Logger
+	l      *zap.Logger
+	config Config
 }
 
 type Options struct {
 	Environment string
+	Config      Config
+	Output      io.Writer
+}
+
+type Config struct {
+	MaskKeys             []string
+	RequestStart         bool
+	SlowQueryThreshold   time.Duration
+	SlowRequestThreshold time.Duration
 }
 
 func New(serviceName string, level string) (Logger, error) {
@@ -28,63 +42,31 @@ func NewWithOptions(serviceName string, level string, options Options) (Logger, 
 	if err != nil {
 		return nil, err
 	}
-	logLocation := time.UTC
-
-	isDev := isDevEnvironment(options.Environment)
-	encoding := "json"
-	encodeLevel := zapcore.LowercaseLevelEncoder
-	if isDev {
-		encoding = "console"
-		encodeLevel = zapcore.CapitalColorLevelEncoder
+	output := options.Output
+	if output == nil {
+		output = os.Stdout
 	}
-
-	cfg := zap.Config{
-		Level:       zap.NewAtomicLevelAt(parsedLevel),
-		Development: isDev,
-		Encoding:    encoding,
-		EncoderConfig: zapcore.EncoderConfig{
-			TimeKey:       "timestamp",
-			LevelKey:      "level",
-			MessageKey:    "message",
-			CallerKey:     "caller",
-			StacktraceKey: "stacktrace",
-			EncodeTime:    timeEncoder(logLocation),
-			EncodeLevel:   encodeLevel,
-			EncodeCaller:  zapcore.ShortCallerEncoder,
-		},
-		OutputPaths:      []string{"stdout"},
-		ErrorOutputPaths: []string{"stderr"},
+	writeSyncer := zapcore.AddSync(output)
+	var core zapcore.Core
+	if isLocalEnvironment(options.Environment) {
+		core = newConsoleCore(writeSyncer, parsedLevel, isTTY(output))
+	} else {
+		encoderConfig := ecszap.NewDefaultEncoderConfig()
+		encoderConfig.EnableStackTrace = false
+		jsonConfig := encoderConfig.ToZapCoreEncoderConfig()
+		jsonConfig.EncodeTime = ecsTimeEncoder
+		core = ecszap.WrapCore(zapcore.NewCore(zapcore.NewJSONEncoder(jsonConfig), orderedECSWriter{output: writeSyncer}, parsedLevel))
 	}
-
-	base, err := cfg.Build()
-	if err != nil {
-		return nil, err
-	}
-
-	base = base.With(
-		zap.String("service", serviceName),
-		zap.String("timezone", logLocation.String()),
+	base := zap.New(core).With(
+		zap.String("service.name", serviceName),
+		zap.String("service.environment", options.Environment),
+		zap.String("service.version", version.Version),
 	)
-
-	return &zapLogger{l: base}, nil
+	return &zapLogger{l: base, config: options.Config}, nil
 }
 
-func isDevEnvironment(env string) bool {
-	switch strings.ToLower(strings.TrimSpace(env)) {
-	case "dev", "local", "development":
-		return true
-	default:
-		return false
-	}
-}
-
-func timeEncoder(location *time.Location) zapcore.TimeEncoder {
-	if location == nil {
-		location = time.UTC
-	}
-	return func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-		enc.AppendString(t.In(location).Format(time.RFC3339))
-	}
+func ecsTimeEncoder(t time.Time, encoder zapcore.PrimitiveArrayEncoder) {
+	encoder.AppendString(t.UTC().Format("2006-01-02T15:04:05.000Z"))
 }
 
 func resolveLogLocation(raw string) *time.Location {
@@ -99,9 +81,14 @@ func resolveLogLocation(raw string) *time.Location {
 	return loc
 }
 
+func isLocalEnvironment(environment string) bool {
+	return strings.TrimSpace(environment) == "local"
+}
+
 func (z *zapLogger) WithComponent(component string) Logger {
 	return &zapLogger{
-		l: z.l.With(zap.String("component", component)),
+		l:      z.l.With(zap.String("labels.component", component)),
+		config: z.config,
 	}
 }
 
@@ -122,7 +109,7 @@ func (z *zapLogger) Warn(ctx context.Context, msg string, fields ...Field) {
 }
 
 func (z *zapLogger) buildFields(ctx context.Context, fields ...Field) []zap.Field {
-	zapFields := make([]zap.Field, 0, len(fields)+3)
+	zapFields := make([]zap.Field, 0, len(fields)+8)
 	hasRequestIDField := false
 
 	for _, f := range fields {
@@ -132,38 +119,41 @@ func (z *zapLogger) buildFields(ctx context.Context, fields ...Field) []zap.Fiel
 		}
 	}
 
-	// Inject trace_id and span_id automatically if exists
+	// Inject ECS trace fields automatically when a span is present.
 	if span := trace.SpanFromContext(ctx); span != nil {
 		sc := span.SpanContext()
 		if sc.IsValid() {
 			zapFields = append(zapFields,
-				zap.String("trace_id", sc.TraceID().String()),
-				zap.String("span_id", sc.SpanID().String()),
+				zap.String("trace.id", sc.TraceID().String()),
+				zap.String("span.id", sc.SpanID().String()),
 			)
 		}
 	}
 
 	if !hasRequestIDField {
 		if requestID := observability.GetRequestID(ctx); requestID != "" {
-			zapFields = append(zapFields, zap.String("request_id", requestID))
+			zapFields = append(zapFields, zap.String("labels.request_id", requestID))
 		}
 	}
 
-	hasTransactionIDField := false
-	for _, f := range fields {
-		if strings.EqualFold(strings.TrimSpace(f.Key), FieldTransactionID) {
-			hasTransactionIDField = true
-			break
-		}
+	if gtid := observability.GetGTID(ctx); gtid != "" {
+		zapFields = append(zapFields, zap.String("labels.gtid", gtid))
 	}
-	if !hasTransactionIDField {
-		if txID := observability.GetTransactionID(ctx); txID != "" {
-			zapFields = append(zapFields, zap.String(FieldTransactionID, txID))
-		}
+	if userID := observability.GetUserID(ctx); userID != "" {
+		zapFields = append(zapFields, zap.String("user.id", userID))
+	}
+	for key, value := range observability.Labels(ctx) {
+		zapFields = append(zapFields, zap.String("labels."+key, value))
 	}
 
 	for _, f := range fields {
-		zapFields = append(zapFields, zap.Any(f.Key, sanitizeFieldValue(f.Key, f.Value)))
+		if f.Key == "request_id" {
+			f.Key = "labels.request_id"
+		}
+		if f.Key == "transaction_id" {
+			f.Key = "labels.gtid"
+		}
+		zapFields = append(zapFields, zap.Any(f.Key, sanitizeFieldValueWithKeys(f.Key, f.Value, z.config.MaskKeys)))
 	}
 
 	return zapFields

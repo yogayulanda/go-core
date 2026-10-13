@@ -3,11 +3,13 @@ package messaging
 import (
 	"context"
 	"errors"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/segmentio/kafka-go"
 	"github.com/yogayulanda/go-core/config"
+	corelogger "github.com/yogayulanda/go-core/logger"
 )
 
 type kafkaMessageReader interface {
@@ -16,7 +18,7 @@ type kafkaMessageReader interface {
 	Close() error
 }
 
-var newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string) kafkaMessageReader {
+var newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string, errorLogger *log.Logger) kafkaMessageReader {
 	return kafka.NewReader(kafka.ReaderConfig{
 		Brokers:        cfg.Brokers,
 		Topic:          topic,
@@ -24,6 +26,7 @@ var newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string) 
 		MinBytes:       1,
 		MaxBytes:       10e6,
 		CommitInterval: 0, // manual commit
+		ErrorLogger:    errorLogger,
 	})
 }
 
@@ -56,8 +59,6 @@ func NewKafkaConsumer(
 		return nil, errors.New("handler cannot be nil")
 	}
 
-	reader := newKafkaReader(cfg, topic, groupID)
-
 	conf := consumerConfig{
 		workerCount: 1,
 	}
@@ -65,6 +66,11 @@ func NewKafkaConsumer(
 	for _, opt := range opts {
 		opt(&conf)
 	}
+	var errorLogger *log.Logger
+	if conf.log != nil {
+		errorLogger = corelogger.NewKafkaErrorLogger(conf.log)
+	}
+	reader := newKafkaReader(cfg, topic, groupID, errorLogger)
 
 	return &kafkaConsumer{
 		reader:  reader,

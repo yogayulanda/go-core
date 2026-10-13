@@ -31,6 +31,7 @@ type Config struct {
 	GRPC           GRPCConfig
 	HTTP           HTTPConfig
 	Observability  ObservabilityConfig
+	Log            LogConfig
 	Diagnostics    DiagnosticsConfig
 	Auth           AuthConfig
 	Redis          RedisConfig
@@ -96,6 +97,13 @@ type ObservabilityConfig struct {
 
 type DiagnosticsConfig struct {
 	Enabled bool // used from WS-7a
+}
+
+type LogConfig struct {
+	MaskKeys             []string
+	RequestStart         bool
+	SlowQueryThreshold   time.Duration
+	SlowRequestThreshold time.Duration
 }
 
 type AuthConfig struct {

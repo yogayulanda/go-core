@@ -22,6 +22,10 @@ type DB struct {
 
 // New initializes database connection pool and GORM instance.
 func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
+	return NewWithLogConfig(cfg, log, time.Second)
+}
+
+func NewWithLogConfig(cfg config.DBConfig, log logger.Logger, slowQueryThreshold time.Duration) (*DB, error) {
 	startedAt := time.Now()
 	if _, err := gormDialector(cfg.Driver, nil); err != nil {
 		return nil, err
@@ -73,6 +77,7 @@ func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
 	}
 	gormDB, err := gorm.Open(dialector, &gorm.Config{
 		PrepareStmt: true,
+		Logger:      logger.NewGORMLogger(log, slowQueryThreshold),
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		},

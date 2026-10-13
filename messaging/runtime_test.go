@@ -3,6 +3,7 @@ package messaging
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"sync"
 	"testing"
@@ -200,7 +201,7 @@ func TestKafkaConsumer_ObservabilitySuccess(t *testing.T) {
 	defer cancel()
 
 	fetchCount := 0
-	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string) kafkaMessageReader {
+	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string, _ *log.Logger) kafkaMessageReader {
 		return stubKafkaReader{
 			fetchFunc: func(ctx context.Context) (kafka.Message, error) {
 				fetchCount++
@@ -251,7 +252,7 @@ func TestKafkaConsumer_ObservabilityCommitFailed(t *testing.T) {
 	defer cancel()
 
 	fetchCount := 0
-	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string) kafkaMessageReader {
+	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string, _ *log.Logger) kafkaMessageReader {
 		return stubKafkaReader{
 			fetchFunc: func(ctx context.Context) (kafka.Message, error) {
 				fetchCount++
@@ -302,7 +303,7 @@ func TestKafkaConsumer_ObservabilityDLQSuccessAndFetchFailed(t *testing.T) {
 	defer cancel()
 
 	fetchCount := 0
-	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string) kafkaMessageReader {
+	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string, _ *log.Logger) kafkaMessageReader {
 		return stubKafkaReader{
 			fetchFunc: func(ctx context.Context) (kafka.Message, error) {
 				fetchCount++

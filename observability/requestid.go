@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"unicode"
 
 	"github.com/google/uuid"
 )
@@ -26,4 +27,16 @@ func GetRequestID(ctx context.Context) string {
 // GenerateRequestID creates new UUID.
 func GenerateRequestID() string {
 	return uuid.NewString()
+}
+
+func IsValidRequestID(requestID string) bool {
+	if len(requestID) == 0 || len(requestID) > 64 {
+		return false
+	}
+	for _, r := range requestID {
+		if !(unicode.IsLetter(r) && r <= unicode.MaxASCII) && !(r >= '0' && r <= '9') && r != '.' && r != '_' && r != '-' {
+			return false
+		}
+	}
+	return true
 }

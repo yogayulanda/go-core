@@ -51,7 +51,7 @@ func init() {
 	_ = Register(
 		Def{Code: "CORE-0000", Class: ClassSuccess, HTTPStatus: 200, GRPCCode: codes.OK, Finality: FinalityBusiness, DefaultMessage: "success"},
 		Def{Code: "CORE-1000", Class: ClassFailed, HTTPStatus: 400, GRPCCode: codes.InvalidArgument, Finality: FinalityBusiness, DefaultMessage: "invalid request"},
-		Def{Code: "CORE-1001", Class: ClassFailed, HTTPStatus: 401, GRPCCode: codes.Unauthenticated, Finality: FinalityBusiness, DefaultMessage: "unauthenticated"},
+		Def{Code: "CORE-1001", Class: ClassFailed, HTTPStatus: 401, GRPCCode: codes.Unauthenticated, Finality: FinalityBusiness, DefaultMessage: "unauthorized request"},
 		Def{Code: "CORE-1002", Class: ClassFailed, HTTPStatus: 401, GRPCCode: codes.Unauthenticated, Finality: FinalityBusiness, DefaultMessage: "session expired"},
 		Def{Code: "CORE-1003", Class: ClassFailed, HTTPStatus: 403, GRPCCode: codes.PermissionDenied, Finality: FinalityBusiness, DefaultMessage: "forbidden"},
 		Def{Code: "CORE-1004", Class: ClassFailed, HTTPStatus: 404, GRPCCode: codes.NotFound, Finality: FinalityBusiness, DefaultMessage: "not found"},

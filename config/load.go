@@ -65,6 +65,12 @@ func Load(opts ...Option) (*Config, error) {
 			OTLPCACertFile:     "",
 			TraceSamplingRatio: 0.1,
 		},
+		Log: LogConfig{
+			MaskKeys:             []string{"password", "passwd", "secret", "token", "authorization", "apikey", "api_key", "pin", "otp", "cvv", "card", "private_key", "session", "phone", "msisdn", "account", "cif", "nik"},
+			RequestStart:         false,
+			SlowQueryThreshold:   time.Second,
+			SlowRequestThreshold: 3 * time.Second,
+		},
 		Diagnostics: DiagnosticsConfig{Enabled: getBool("DIAG_ENABLED", true)},
 		Auth: AuthConfig{
 			Signature: SignatureConfig{

@@ -9,6 +9,7 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	"github.com/yogayulanda/go-core/config"
+	corelogger "github.com/yogayulanda/go-core/logger"
 )
 
 var ErrPublisherClosed = errors.New("publisher already closed")
@@ -44,6 +45,9 @@ func NewKafkaPublisher(
 
 	for _, opt := range opts {
 		opt(&conf)
+	}
+	if concreteWriter, ok := writer.(*kafka.Writer); ok && conf.log != nil {
+		concreteWriter.ErrorLogger = corelogger.NewKafkaErrorLogger(conf.log)
 	}
 
 	return &kafkaPublisher{

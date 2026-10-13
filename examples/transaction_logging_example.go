@@ -2,9 +2,9 @@ package examples
 
 import (
 	"context"
-	"time"
 
 	"github.com/yogayulanda/go-core/logger"
+	"github.com/yogayulanda/go-core/observability"
 )
 
 // LogTransactionExample shows how a transaction-oriented service can emit
@@ -13,17 +13,15 @@ func LogTransactionExample(ctx context.Context, log logger.Logger, transactionID
 	if log == nil {
 		return
 	}
+	ctx = observability.WithGTID(ctx, transactionID)
+	_ = observability.SetUserID(ctx, userID)
 
 	log.LogTransaction(ctx, logger.TransactionLog{
-		Operation:     "payment_process",
-		TransactionID: transactionID,
-		UserID:        userID,
-		Status:        status,
-		DurationMs:    120,
-		ErrorCode:     "",
-		Metadata: map[string]interface{}{
-			"channel":     "mobile_app",
-			"occurred_at": time.Now().UTC().Format(time.RFC3339),
-		},
+		Feature:      "payment",
+		Product:      "bank_transfer",
+		Status:       status,
+		ResponseCode: "CORE-0000",
+		Amount:       150000,
+		DurationMs:   120,
 	})
 }

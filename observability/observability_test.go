@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +30,59 @@ func TestGenerateRequestID(t *testing.T) {
 	}
 	if a == b {
 		t.Fatalf("request id must be unique")
+	}
+}
+
+func TestRequestIDValidation(t *testing.T) {
+	for _, requestID := range []string{"a", "abc-123.X_y", "A" + strings.Repeat("b", 63)} {
+		if !IsValidRequestID(requestID) {
+			t.Errorf("expected request ID %q to be valid", requestID)
+		}
+	}
+	for _, requestID := range []string{"", "../etc", strings.Repeat("a", 65), "line\nbreak", "ümlaut"} {
+		if IsValidRequestID(requestID) {
+			t.Errorf("expected request ID %q to be invalid", requestID)
+		}
+	}
+}
+
+func TestFieldBagSetAndRestoreIncomingIdentity(t *testing.T) {
+	ctx := EnsureFieldBag(context.Background())
+	if err := RegisterPropagatedLabel("client_app"); err != nil {
+		t.Fatalf("register propagated label: %v", err)
+	}
+	RestoreIncomingIdentity(ctx, "user-1", map[string]string{"client_app": "sitepat"})
+	if got := GetUserID(ctx); got != "user-1" {
+		t.Fatalf("unexpected user id: %q", got)
+	}
+	if got := Labels(ctx)["client_app"]; got != "sitepat" {
+		t.Fatalf("unexpected propagated label: %q", got)
+	}
+	if err := SetLabel(ctx, "password", "secret"); err != nil {
+		t.Fatalf("set label: %v", err)
+	}
+	labels := Labels(ctx)
+	labels["client_app"] = "mutated-copy"
+	if got := Labels(ctx)["client_app"]; got != "sitepat" {
+		t.Fatalf("Labels must return a copy; got %q", got)
+	}
+}
+
+func TestFieldBagConcurrentUpdates(t *testing.T) {
+	ctx := EnsureFieldBag(context.Background())
+	var workers sync.WaitGroup
+	for i := range 16 {
+		workers.Add(1)
+		go func(index int) {
+			defer workers.Done()
+			_ = SetUserID(ctx, fmt.Sprintf("user-%d", index))
+			_ = SetLabel(ctx, fmt.Sprintf("label%d", index), "value")
+			_ = Labels(ctx)
+		}(i)
+	}
+	workers.Wait()
+	if len(Labels(ctx)) != 16 {
+		t.Fatalf("expected all concurrent labels, got %d", len(Labels(ctx)))
 	}
 }
 

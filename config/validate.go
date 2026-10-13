@@ -27,14 +27,11 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 			issues = append(issues, issue("app", "APP_ENV", "APP_ENV must be one of local, dev, sit, uat, prod"))
 		}
 	}
-	if c.App.Environment == "" {
-		issues = append(issues, issue("app", "APP_ENV", "APP_ENV is required"))
-	} else {
-		switch c.App.Environment {
-		case "local", "dev", "sit", "uat", "prod":
-		default:
-			issues = append(issues, issue("app", "APP_ENV", "APP_ENV must be one of local, dev, sit, uat, prod"))
-		}
+	if c.Log.SlowQueryThreshold < 0 {
+		issues = append(issues, issue("log", "SlowQueryThreshold", "SlowQueryThreshold must be >= 0"))
+	}
+	if c.Log.SlowRequestThreshold < 0 {
+		issues = append(issues, issue("log", "SlowRequestThreshold", "SlowRequestThreshold must be >= 0"))
 	}
 
 	for name, db := range c.Databases {

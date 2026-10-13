@@ -65,7 +65,7 @@ func withSuccessEnvelope(next http.Handler) http.Handler {
 			if span := trace.SpanFromContext(ctx); span != nil && span.SpanContext().IsValid() {
 				traceID = span.SpanContext().TraceID().String()
 			}
-			txID := observability.GetTransactionID(ctx)
+			txID := observability.GetGTID(ctx)
 
 			// Parse data
 			var data json.RawMessage

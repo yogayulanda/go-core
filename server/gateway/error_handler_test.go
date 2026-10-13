@@ -187,3 +187,23 @@ func TestCustomErrorHandler_RegisteredHTTPStatusOverridesGRPCDefault(t *testing.
 		t.Fatalf("unexpected response: %+v", body)
 	}
 }
+
+func TestCustomErrorHandler_UnregisteredAppCodeMapsInternal(t *testing.T) {
+	application := newTestApp(t, &config.Config{
+		App:       config.AppConfig{ServiceName: "gateway-unknown-code-test", Environment: "dev", LogLevel: "error", ShutdownTimeout: time.Second},
+		Databases: map[string]config.DBConfig{},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/example", nil)
+	customErrorHandler(application)(context.Background(), runtime.NewServeMux(), nil, rec, req, coreErrors.New("CUSTOM-UNKNOWN", "internal detail"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected HTTP 500, got %d", rec.Code)
+	}
+	var body legacyGatewayError
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if body.Code != "CORE-9000" || body.Message != "internal server error" {
+		t.Fatalf("unexpected unregistered-code response: %+v", body)
+	}
+}

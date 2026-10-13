@@ -12,7 +12,6 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc/status"
 
 	coreErrors "github.com/yogayulanda/go-core/errors"
 )
@@ -35,33 +34,13 @@ func customErrorHandler(app *app.App) runtime.ErrorHandlerFunc {
 			traceID = span.SpanContext().TraceID().String()
 		}
 
-		txID := observability.GetTransactionID(ctx)
+		txID := observability.GetGTID(ctx)
 		resp, httpStatus := legacyErrorResponseFromError(err, traceID, txID)
 		w.WriteHeader(httpStatus)
 		resp.Timestamp = time.Now().UTC().Format(time.RFC3339)
 
 		_ = json.NewEncoder(w).Encode(resp)
 	}
-}
-
-func httpStatusFromError(err error) int {
-	st, ok := status.FromError(err)
-	if ok {
-		if info, found := coreErrors.InfoFromGRPC(err); found {
-			def, _ := coreErrors.Lookup(info.Code)
-			return def.HTTPStatus
-		}
-		return runtime.HTTPStatusFromCode(st.Code())
-	}
-
-	var appErr *coreErrors.AppError
-	if stderrors.As(err, &appErr) {
-		def, _ := coreErrors.Resolve(appErr.Code)
-		return def.HTTPStatus
-	}
-
-	def, _ := coreErrors.Lookup("CORE-9000")
-	return def.HTTPStatus
 }
 
 func legacyErrorResponseFromError(err error, traceID, transactionID string) (legacyGatewayError, int) {
