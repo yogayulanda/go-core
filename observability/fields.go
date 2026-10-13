@@ -17,6 +17,11 @@ type FieldBag struct {
 	userID            string
 	labels            map[string]string
 	requestIDReplaced bool
+	clientIP          string
+	userAgent         string
+	responseCode      string
+	responseClass     string
+	unregisteredCode  string
 }
 
 var propagatedLabels = struct {
@@ -65,6 +70,71 @@ func GetUserID(ctx context.Context) string {
 	bag.mu.RLock()
 	defer bag.mu.RUnlock()
 	return bag.userID
+}
+
+func SetClientIP(ctx context.Context, address string) error {
+	bag := fieldBag(ctx)
+	if bag == nil {
+		return fmt.Errorf("observability field bag is not present in context")
+	}
+	bag.mu.Lock()
+	bag.clientIP = address
+	bag.mu.Unlock()
+	return nil
+}
+
+func GetClientIP(ctx context.Context) string {
+	bag := fieldBag(ctx)
+	if bag == nil {
+		return ""
+	}
+	bag.mu.RLock()
+	defer bag.mu.RUnlock()
+	return bag.clientIP
+}
+
+func SetUserAgent(ctx context.Context, userAgent string) error {
+	bag := fieldBag(ctx)
+	if bag == nil {
+		return fmt.Errorf("observability field bag is not present in context")
+	}
+	bag.mu.Lock()
+	bag.userAgent = userAgent
+	bag.mu.Unlock()
+	return nil
+}
+
+func GetUserAgent(ctx context.Context) string {
+	bag := fieldBag(ctx)
+	if bag == nil {
+		return ""
+	}
+	bag.mu.RLock()
+	defer bag.mu.RUnlock()
+	return bag.userAgent
+}
+
+func SetResponseInfo(ctx context.Context, code, class, originalUnregistered string) error {
+	bag := fieldBag(ctx)
+	if bag == nil {
+		return fmt.Errorf("observability field bag is not present in context")
+	}
+	bag.mu.Lock()
+	bag.responseCode = code
+	bag.responseClass = class
+	bag.unregisteredCode = originalUnregistered
+	bag.mu.Unlock()
+	return nil
+}
+
+func ResponseInfo(ctx context.Context) (code, class, originalUnregistered string) {
+	bag := fieldBag(ctx)
+	if bag == nil {
+		return "", "", ""
+	}
+	bag.mu.RLock()
+	defer bag.mu.RUnlock()
+	return bag.responseCode, bag.responseClass, bag.unregisteredCode
 }
 
 func SetLabel(ctx context.Context, name, value string) error {

@@ -55,6 +55,7 @@ func init() {
 		Def{Code: "CORE-1002", Class: ClassFailed, HTTPStatus: 401, GRPCCode: codes.Unauthenticated, Finality: FinalityBusiness, DefaultMessage: "session expired"},
 		Def{Code: "CORE-1003", Class: ClassFailed, HTTPStatus: 403, GRPCCode: codes.PermissionDenied, Finality: FinalityBusiness, DefaultMessage: "forbidden"},
 		Def{Code: "CORE-1004", Class: ClassFailed, HTTPStatus: 404, GRPCCode: codes.NotFound, Finality: FinalityBusiness, DefaultMessage: "not found"},
+		Def{Code: "CORE-1005", Class: ClassFailed, HTTPStatus: 413, GRPCCode: codes.ResourceExhausted, Finality: FinalityBusiness, DefaultMessage: "request body too large"},
 		Def{Code: "CORE-9000", Class: ClassError, HTTPStatus: 500, GRPCCode: codes.Internal, Finality: FinalityTechnicalNonRecoverable, DefaultMessage: "internal server error"},
 		Def{Code: "CORE-9001", Class: ClassError, HTTPStatus: 503, GRPCCode: codes.Unavailable, Finality: FinalityTechnicalRecoverable, Retryable: true, DefaultMessage: "service unavailable"},
 	)
@@ -102,6 +103,11 @@ func SetMessageProvider(provider MessageProvider) {
 	registry.Lock()
 	registry.messageProvider = provider
 	registry.Unlock()
+}
+
+func Message(ctx context.Context, code string) string {
+	def, _ := Resolve(code)
+	return messageFor(ctx, def.Code, def)
 }
 
 func messageFor(ctx context.Context, code string, def Def) string {

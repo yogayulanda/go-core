@@ -85,7 +85,14 @@ type HTTPConfig struct {
 	TLSCertFile        string
 	TLSKeyFile         string
 	PprofEnabled       bool
-	CORSAllowedOrigins []string // used from WS-4
+	CORSAllowedOrigins []string
+	CORSAllowedHeaders []string
+	ReadHeaderTimeout  time.Duration
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
+	MaxBodyBytes       int64
+	TrustedProxyHops   int
 }
 
 type ObservabilityConfig struct {

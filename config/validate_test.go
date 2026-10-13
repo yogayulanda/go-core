@@ -9,8 +9,9 @@ import (
 func TestValidate_InternalJWTNegativeLeeway(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
-			ServiceName: "svc",
-			Environment: "dev",
+			ServiceName:     "svc",
+			Environment:     "dev",
+			ShutdownTimeout: 25 * time.Second,
 		},
 		Auth: AuthConfig{
 			InternalJWT: InternalJWTConfig{
@@ -18,6 +19,13 @@ func TestValidate_InternalJWTNegativeLeeway(t *testing.T) {
 				PublicKey: "dummy",
 				Leeway:    -1 * time.Second,
 			},
+		},
+		HTTP: HTTPConfig{
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			MaxBodyBytes:      1 << 20,
 		},
 	}
 
@@ -33,8 +41,9 @@ func TestValidate_InternalJWTNegativeLeeway(t *testing.T) {
 func TestValidate_InternalJWTIncludeExcludeConflict(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
-			ServiceName: "svc",
-			Environment: "dev",
+			ServiceName:     "svc",
+			Environment:     "dev",
+			ShutdownTimeout: 25 * time.Second,
 		},
 		Auth: AuthConfig{
 			InternalJWT: InternalJWTConfig{
@@ -59,8 +68,9 @@ func TestValidate_InternalJWTIncludeExcludeConflict(t *testing.T) {
 func TestValidate_InternalJWTIncludeOnlyValid(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
-			ServiceName: "svc",
-			Environment: "dev",
+			ServiceName:     "svc",
+			Environment:     "dev",
+			ShutdownTimeout: 25 * time.Second,
 		},
 		Auth: AuthConfig{
 			InternalJWT: InternalJWTConfig{
@@ -69,6 +79,13 @@ func TestValidate_InternalJWTIncludeOnlyValid(t *testing.T) {
 				Leeway:         10 * time.Second,
 				IncludeMethods: []string{"/a.b.C/Call"},
 			},
+		},
+		HTTP: HTTPConfig{
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			MaxBodyBytes:      1 << 20,
 		},
 	}
 
@@ -80,8 +97,9 @@ func TestValidate_InternalJWTIncludeOnlyValid(t *testing.T) {
 func TestValidate_GRPCTLSEnabledWithoutFiles(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
-			ServiceName: "svc",
-			Environment: "dev",
+			ServiceName:     "svc",
+			Environment:     "dev",
+			ShutdownTimeout: 25 * time.Second,
 		},
 		GRPC: GRPCConfig{
 			TLSEnabled: true,
@@ -161,8 +179,9 @@ func TestValidate_MigrationAutoRunRequiresExplicitDBAndDir(t *testing.T) {
 func TestValidate_MigrationDBMustExistWithNormalizedAlias(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
-			ServiceName: "svc",
-			Environment: "dev",
+			ServiceName:     "svc",
+			Environment:     "dev",
+			ShutdownTimeout: 25 * time.Second,
 		},
 		Databases: map[string]DBConfig{
 			"transaction_history": {
@@ -178,6 +197,13 @@ func TestValidate_MigrationDBMustExistWithNormalizedAlias(t *testing.T) {
 			AutoRun: true,
 			DBName:  "Transaction_History",
 			Dir:     "migrations/history",
+		},
+		HTTP: HTTPConfig{
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			MaxBodyBytes:      1 << 20,
 		},
 	}
 
@@ -200,6 +226,13 @@ func TestValidate_DBConnMaxIdleTimeNegative(t *testing.T) {
 				ConnMaxIdleTime: -1 * time.Second,
 				ConnMaxLifetime: time.Minute,
 			},
+		},
+		HTTP: HTTPConfig{
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			MaxBodyBytes:      1 << 20,
 		},
 	}
 
@@ -263,7 +296,13 @@ func TestValidate_ReturnsValidationErrorsType(t *testing.T) {
 func TestValidate_AppEnvironmentAllowedValues(t *testing.T) {
 	for _, environment := range []string{"local", "dev", "sit", "uat", "prod"} {
 		t.Run(environment, func(t *testing.T) {
-			cfg := &Config{App: AppConfig{ServiceName: "svc", Environment: environment}}
+			cfg := &Config{App: AppConfig{ServiceName: "svc", Environment: environment, ShutdownTimeout: 25 * time.Second}, HTTP: HTTPConfig{
+				ReadHeaderTimeout: 5 * time.Second,
+				ReadTimeout:       15 * time.Second,
+				WriteTimeout:      60 * time.Second,
+				IdleTimeout:       120 * time.Second,
+				MaxBodyBytes:      1 << 20,
+			}}
 			if err := cfg.Validate(); err != nil {
 				t.Fatalf("valid APP_ENV %q rejected: %v", environment, err)
 			}
@@ -276,5 +315,25 @@ func TestValidate_AppEnvironmentAllowedValues(t *testing.T) {
 				t.Fatalf("expected APP_ENV validation error, got %v", err)
 			}
 		})
+	}
+}
+
+func TestValidate_PprofForbiddenInProduction(t *testing.T) {
+	cfg := &Config{
+		App:  AppConfig{ServiceName: "svc", Environment: "prod", ShutdownTimeout: 25 * time.Second},
+		HTTP: HTTPConfig{PprofEnabled: true, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second, MaxBodyBytes: 1 << 20},
+	}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "pprof is forbidden") {
+		t.Fatalf("expected production pprof validation error, got %v", err)
+	}
+}
+
+func TestValidate_HTTPTimeoutRelationship(t *testing.T) {
+	cfg := &Config{
+		App:  AppConfig{ServiceName: "svc", Environment: "dev", ShutdownTimeout: 25 * time.Second},
+		HTTP: HTTPConfig{ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 120 * time.Second, MaxBodyBytes: 1 << 20},
+	}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "WriteTimeout must be greater") {
+		t.Fatalf("expected timeout relationship validation error, got %v", err)
 	}
 }

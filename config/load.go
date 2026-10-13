@@ -58,6 +58,13 @@ func Load(opts ...Option) (*Config, error) {
 			TLSKeyFile:         "",
 			PprofEnabled:       getBool("HTTP_PPROF_ENABLED", false),
 			CORSAllowedOrigins: getStringSlice("HTTP_CORS_ALLOWED_ORIGINS"),
+			CORSAllowedHeaders: []string{"Content-Type", "Authorization", "X-Request-ID"},
+			ReadHeaderTimeout:  5 * time.Second,
+			ReadTimeout:        15 * time.Second,
+			WriteTimeout:       60 * time.Second,
+			IdleTimeout:        120 * time.Second,
+			MaxBodyBytes:       1 << 20,
+			TrustedProxyHops:   0,
 		},
 		Observability: ObservabilityConfig{
 			OTLPEndpoint:       getString("APM_ENDPOINT", ""),

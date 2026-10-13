@@ -5,17 +5,18 @@ import (
 	"net/http"
 	"time"
 
-	"go.opentelemetry.io/otel/trace"
-
-	"github.com/yogayulanda/go-core/observability"
+	coreerrors "github.com/yogayulanda/go-core/errors"
+	"github.com/yogayulanda/go-core/response"
 )
 
-type successResponse struct {
-	Success       bool            `json:"success"`
-	TraceID       string          `json:"trace_id,omitempty"`
-	TransactionID string          `json:"transaction_id,omitempty"`
-	Timestamp     string          `json:"timestamp"`
-	Data          json.RawMessage `json:"data"`
+type gatewayEnvelope struct {
+	Status       string              `json:"status"`
+	ResponseCode string              `json:"response_code"`
+	Message      string              `json:"message"`
+	RequestID    string              `json:"request_id"`
+	Timestamp    string              `json:"timestamp"`
+	Data         json.RawMessage     `json:"data,omitempty"`
+	Details      []coreerrors.Detail `json:"details,omitempty"`
 }
 
 type responseBuffer struct {
@@ -43,61 +44,63 @@ func (r *responseBuffer) Write(b []byte) (int, error) {
 
 func withSuccessEnvelope(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Do not wrap health/ready endpoints
-		path := r.URL.Path
-		if path == "/health" || path == "/ready" || path == "/version" || path == "/metrics" {
+		if isOperationalPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
+		buffered := &responseBuffer{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(buffered, r)
 
-		buf := &responseBuffer{
-			ResponseWriter: w,
-			status:         http.StatusOK,
+		responseCode := response.CodeFromHTTPHeader(buffered.Header())
+		buffered.Header().Del("X-Response-Code")
+		buffered.Header().Del("Grpc-Metadata-X-Response-Code")
+		if responseCode == "" {
+			responseCode = "CORE-0000"
 		}
-
-		next.ServeHTTP(buf, r)
-
-		// Only wrap 2xx JSON responses. Errors (4xx/5xx) are already wrapped by customErrorHandler.
-		if buf.status >= 200 && buf.status < 300 {
-			// Extract context fields
-			ctx := r.Context()
-			traceID := observability.GetRequestID(ctx)
-			if span := trace.SpanFromContext(ctx); span != nil && span.SpanContext().IsValid() {
-				traceID = span.SpanContext().TraceID().String()
-			}
-			txID := observability.GetGTID(ctx)
-
-			// Parse data
-			var data json.RawMessage
-			if len(buf.body) > 0 {
-				data = json.RawMessage(buf.body)
-			} else {
-				data = json.RawMessage("{}") // Default empty object if no body
-			}
-
-			wrapped := successResponse{
-				Success:       true,
-				TraceID:       traceID,
-				TransactionID: txID,
-				Timestamp:     time.Now().UTC().Format(time.RFC3339),
-				Data:          data,
-			}
-
-			// Copy original headers
-			for k, v := range buf.Header() {
-				w.Header()[k] = v
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(buf.status)
-			_ = json.NewEncoder(w).Encode(wrapped)
+		def, registered := coreerrors.Lookup(responseCode)
+		if !registered {
+			def, _ = coreerrors.Lookup("CORE-9000")
+		}
+		if buffered.status < 200 || buffered.status >= 300 {
+			copyHeaders(w.Header(), buffered.Header())
+			w.WriteHeader(buffered.status)
+			_, _ = w.Write(buffered.body)
 			return
 		}
 
-		// For non-2xx or non-JSON, write as-is
-		for k, v := range buf.Header() {
-			w.Header()[k] = v
+		data := json.RawMessage(buffered.body)
+		if len(data) == 0 {
+			data = json.RawMessage("{}")
 		}
-		w.WriteHeader(buf.status)
-		_, _ = w.Write(buf.body)
+		status := string(def.Class)
+		if def.Class == coreerrors.ClassUnknown {
+			status = string(coreerrors.ClassPending)
+		}
+		wrapped := gatewayEnvelope{
+			Status:       status,
+			ResponseCode: def.Code,
+			Message:      coreerrors.Message(r.Context(), def.Code),
+			RequestID:    responseRequestID(r),
+			Timestamp:    time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+			Data:         data,
+		}
+		copyHeaders(w.Header(), buffered.Header())
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(def.HTTPStatus)
+		_ = json.NewEncoder(w).Encode(wrapped)
 	})
+}
+
+func responseRequestID(r *http.Request) string {
+	return r.Header.Get(requestIDHeader)
+}
+
+func isOperationalPath(path string) bool {
+	return path == "/health" || path == "/ready" || path == "/version" || path == "/metrics" || path == "/debug/pprof" || len(path) > len("/debug/pprof/") && path[:len("/debug/pprof/")] == "/debug/pprof/"
+}
+
+func copyHeaders(destination, source http.Header) {
+	for key, values := range source {
+		destination[key] = append([]string(nil), values...)
+	}
 }

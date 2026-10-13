@@ -28,6 +28,17 @@ func TestResolveUnknownUsesInternalFallback(t *testing.T) {
 	}
 }
 
+func TestBodyTooLargeCodeUsesHTTP413AndResourceExhausted(t *testing.T) {
+	def, ok := Lookup("CORE-1005")
+	if !ok || def.HTTPStatus != 413 || def.GRPCCode != codes.ResourceExhausted || def.Class != ClassFailed {
+		t.Fatalf("unexpected body-too-large definition: %+v, %v", def, ok)
+	}
+	validation, ok := Lookup("CORE-1000")
+	if !ok || validation.HTTPStatus != 400 {
+		t.Fatalf("CORE-1000 must remain validation/400: %+v, %v", validation, ok)
+	}
+}
+
 func TestLookupConcurrentReads(t *testing.T) {
 	const code = "TEST-LOOKUP-CONCURRENT"
 	if err := Register(Def{Code: code, Class: ClassFailed, HTTPStatus: 422, GRPCCode: codes.InvalidArgument, Finality: FinalityBusiness, DefaultMessage: "failed"}); err != nil {

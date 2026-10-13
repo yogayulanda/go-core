@@ -69,6 +69,11 @@ func loggingInterceptorWithLogger(log logger.Logger, requestStart bool) grpc.Una
 		class := "SUCCESS"
 		unregisteredCode := ""
 		errorMessage := ""
+		if code, responseClass, original := observability.ResponseInfo(ctx); code != "" {
+			responseCode = code
+			class = responseClass
+			unregisteredCode = original
+		}
 
 		if err != nil {
 			var appErr *coreErrors.AppError
@@ -253,6 +258,7 @@ func requestIDInterceptor() grpc.UnaryServerInterceptor {
 			}
 		}
 		ctx = observability.WithRequestID(ctx, requestID)
+		_ = grpc.SetHeader(ctx, metadata.Pairs("x-request-id", requestID))
 
 		userIDs := md.Get("x-user-id")
 		labels := make(map[string]string)
@@ -274,6 +280,15 @@ func requestIDInterceptor() grpc.UnaryServerInterceptor {
 			userID = userIDs[0]
 		}
 		observability.RestoreIncomingIdentity(ctx, userID, labels)
+		if values := md.Get("x-core-client-ip"); len(values) > 0 {
+			_ = observability.SetClientIP(ctx, values[0])
+		}
+		if values := md.Get("x-core-user-agent"); len(values) > 0 {
+			_ = observability.SetUserAgent(ctx, values[0])
+		}
+		if values := md.Get("x-core-request-id-replaced"); len(values) > 0 && values[0] == "true" {
+			observability.MarkRequestIDReplaced(ctx)
+		}
 
 		return handler(ctx, req)
 	}

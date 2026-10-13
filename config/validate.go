@@ -33,6 +33,18 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 	if c.Log.SlowRequestThreshold < 0 {
 		issues = append(issues, issue("log", "SlowRequestThreshold", "SlowRequestThreshold must be >= 0"))
 	}
+	if c.HTTP.ReadHeaderTimeout <= 0 || c.HTTP.ReadTimeout <= 0 || c.HTTP.WriteTimeout <= 0 || c.HTTP.IdleTimeout <= 0 || c.HTTP.MaxBodyBytes <= 0 {
+		issues = append(issues, issue("http", "TimeoutsAndMaxBodyBytes", "HTTP timeouts and MaxBodyBytes must be > 0"))
+	}
+	if c.HTTP.WriteTimeout <= c.HTTP.ReadTimeout {
+		issues = append(issues, issue("http", "WriteTimeout", "HTTP WriteTimeout must be greater than ReadTimeout"))
+	}
+	if c.HTTP.TrustedProxyHops < 0 {
+		issues = append(issues, issue("http", "TrustedProxyHops", "TrustedProxyHops must be >= 0"))
+	}
+	if c.HTTP.PprofEnabled && (c.App.Environment == "prod" || c.App.Environment == "production") {
+		issues = append(issues, issue("http", "HTTP_PPROF_ENABLED", "pprof is forbidden in production"))
+	}
 
 	for name, db := range c.Databases {
 		if !isSupportedDBDriver(db.Driver) {

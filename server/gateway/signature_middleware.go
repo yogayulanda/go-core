@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,26 +34,16 @@ func withSignatureValidation(application *app.App, next http.Handler) http.Handl
 
 		sendUnauthorized := func(reason string) {
 			log.LogService(ctx, logger.ServiceLog{
-				Operation: "signature_validation",
-				Status:    "failed",
-				ErrorCode: "unauthorized",
-				Metadata: map[string]interface{}{
-					"reason": reason,
-				},
+				LogType:      "access",
+				Class:        "FAILED",
+				Method:       r.Method,
+				Route:        r.URL.Path,
+				StatusCode:   http.StatusUnauthorized,
+				ResponseCode: "CORE-1001",
+				ErrorMessage: reason,
 			})
 
-			w.Header().Set("Content-Type", "application/json")
-			if requestID != "" {
-				w.Header().Set("x-request-id", requestID)
-			}
-			w.WriteHeader(http.StatusUnauthorized)
-
-			errResp := legacyGatewayError{
-				Code:    "CORE-1001",
-				Message: "unauthorized request",
-				TraceID: requestID,
-			}
-			_ = json.NewEncoder(w).Encode(errResp)
+			writeGatewayError(ctx, w, requestID, "CORE-1001", nil)
 		}
 
 		if providedSignature == "" || providedTimestampRaw == "" {

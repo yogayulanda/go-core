@@ -1,8 +1,8 @@
 package gateway
 
 import (
-	"encoding/json"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/yogayulanda/go-core/app"
 	"github.com/yogayulanda/go-core/logger"
@@ -18,29 +18,17 @@ func withPanicRecovery(application *app.App, next http.Handler) http.Handler {
 			if rec := recover(); rec != nil {
 				// Log the panic with stack trace and standard schema
 				application.Logger().LogService(ctx, logger.ServiceLog{
-					Operation: "http_request",
-					Status:    "failed",
-					ErrorCode: "panic_recovered",
-					Metadata: map[string]interface{}{
-						"method": r.Method,
-						"path":   r.URL.Path,
-						"panic":  rec,
-					},
+					LogType:         "access",
+					Class:           "ERROR",
+					Method:          r.Method,
+					Route:           r.URL.Path,
+					StatusCode:      http.StatusInternalServerError,
+					ResponseCode:    "CORE-9000",
+					ErrorMessage:    "panic recovered",
+					ErrorStackTrace: string(debug.Stack()),
 				})
 
-				// Return a standardized 500 error response
-				w.Header().Set("Content-Type", "application/json")
-				if requestID != "" {
-					w.Header().Set("x-request-id", requestID)
-				}
-				w.WriteHeader(http.StatusInternalServerError)
-
-				errResp := legacyGatewayError{
-					Code:    "CORE-9000",
-					Message: "internal server error",
-					TraceID: requestID,
-				}
-				_ = json.NewEncoder(w).Encode(errResp)
+				writeGatewayError(ctx, w, requestID, "CORE-9000", nil)
 			}
 		}()
 

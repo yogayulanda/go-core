@@ -30,6 +30,7 @@ type ServiceLog struct {
 	StatusCode        int
 	ResponseCode      string
 	ErrorMessage      string
+	ErrorStackTrace   string
 	UnregisteredCode  string
 	RequestIDReplaced bool
 	Slow              bool
@@ -105,6 +106,9 @@ func (z *zapLogger) logAccess(ctx context.Context, access ServiceLog) {
 	}
 	if access.ErrorMessage != "" {
 		fields = append(fields, Field{Key: "error.message", Value: access.ErrorMessage})
+	}
+	if access.ErrorStackTrace != "" {
+		fields = append(fields, Field{Key: "error.stack_trace", Value: access.ErrorStackTrace})
 	}
 	switch level {
 	case 3:

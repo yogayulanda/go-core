@@ -52,6 +52,8 @@ func TestRequestIDInterceptorValidatesIDAndRestoresIncomingIdentity(t *testing.T
 		"x-user-id", "user-7",
 		"x-label-client_app", "sitepat",
 		"x-label-unregistered", "ignored",
+		"x-core-client-ip", "1.1.1.1",
+		"x-core-user-agent", "client/1.2",
 	))
 	var handlerContext context.Context
 	interceptor := requestIDInterceptor()
@@ -73,6 +75,12 @@ func TestRequestIDInterceptorValidatesIDAndRestoresIncomingIdentity(t *testing.T
 	}
 	if got := observability.Labels(handlerContext)["client_app"]; got != "sitepat" {
 		t.Fatalf("unexpected restored label: %q", got)
+	}
+	if got := observability.GetClientIP(handlerContext); got != "1.1.1.1" {
+		t.Fatalf("unexpected restored client IP: %q", got)
+	}
+	if got := observability.GetUserAgent(handlerContext); got != "client/1.2" {
+		t.Fatalf("unexpected restored user-agent: %q", got)
 	}
 	if _, ok := observability.Labels(handlerContext)["unregistered"]; ok {
 		t.Fatal("unregistered propagated label was restored")

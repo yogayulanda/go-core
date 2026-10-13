@@ -142,6 +142,12 @@ func (z *zapLogger) buildFields(ctx context.Context, fields ...Field) []zap.Fiel
 	if userID := observability.GetUserID(ctx); userID != "" {
 		zapFields = append(zapFields, zap.String("user.id", userID))
 	}
+	if clientIP := observability.GetClientIP(ctx); clientIP != "" {
+		zapFields = append(zapFields, zap.String("client.ip", clientIP))
+	}
+	if userAgent := observability.GetUserAgent(ctx); userAgent != "" {
+		zapFields = append(zapFields, zap.String("user_agent.original", userAgent))
+	}
 	for key, value := range observability.Labels(ctx) {
 		zapFields = append(zapFields, zap.String("labels."+key, value))
 	}

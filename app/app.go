@@ -12,6 +12,7 @@ import (
 	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/messaging"
 	"github.com/yogayulanda/go-core/observability"
+	coreversion "github.com/yogayulanda/go-core/version"
 )
 
 var newDatabaseFn = database.NewWithLogConfig
@@ -135,6 +136,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		Status:     "success",
 		DurationMs: time.Since(startedAt).Milliseconds(),
 		Metadata: map[string]interface{}{
+			"service.version":    coreversion.Version,
 			"database_count":     len(dbs),
 			"redis_enabled":      cfg.Redis.Enabled,
 			"memcached_enabled":  cfg.Memcached.Enabled,
