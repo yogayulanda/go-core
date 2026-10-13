@@ -4,7 +4,7 @@ The `errors` package uses an open response-code registry. Register each applicat
 
 ## The `AppError` Contract
 
-`AppError` carries a registry code, technical message, optional validation details, and an internal wrapped error. The registry is authoritative for class, finality, retryability, and transport statuses. Supply localized user-facing messages through `MessageProvider`; otherwise the registry's safe default message is used.
+`AppError` carries a registry code, technical message, optional validation details, and an internal wrapped error. Create errors with `errors.New`, `errors.Wrap`, or `errors.Validation`; register custom definitions with `errors.Register`. The registry is authoritative for class, finality, retryability, and transport statuses. Supply localized messages through `MessageProvider`; otherwise the registry's safe default message is used.
 
 ## Finality Levels
 
@@ -19,4 +19,4 @@ Use `Register` to add definitions; duplicate or invalid definitions fail. `Looku
 
 ## Gateway Status Mapping
 
-The gateway resolves registered codes to their configured HTTP status. Its existing error-body shape remains in place until the response-envelope change in WS-4.
+The gateway resolves registered codes to their configured HTTP status and emits the current envelope: `status`, `response_code`, `message`, `request_id`, and `timestamp`. Successful responses include `data`; only validation errors include `details`. Unknown codes map to `CORE-9000`. Oversized request bodies use `CORE-1005` / HTTP 413, not the validation code.

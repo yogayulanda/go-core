@@ -15,6 +15,8 @@ JWT checks:
 - optional issuer/audience
 - explicit include/exclude method policy
 
+HTTP request signatures are enabled when `AUTH_SIGNATURE_MASTER_KEY` is non-empty. The gateway checks the configured signature/timestamp headers and rejects invalid or stale signatures before the request reaches gRPC. `Q-SIG` remains open: the exact scheme used by the existing webview/service integration has not been confirmed. Do not claim replay protection beyond the current timestamp-drift check or change the wire format without that confirmation.
+
 Operational guidance:
 - gRPC startup emits `auth_config` so operators can see whether the service is in metadata extraction mode or JWT verification mode
 - JWT auth failures are sanitized to clients as unauthorized responses
@@ -28,3 +30,5 @@ Claims contract:
 - `Attributes`
 
 Never expose secrets or raw tokens in logs/errors.
+
+Kafka credentials and trust material (`KAFKA_PASSWORD`, `KAFKA_JKS_PASSWORD`, JKS/PEM contents) are sensitive. The shared internal truststore loader returns `*tls.Config`; do not log file contents or credential values.

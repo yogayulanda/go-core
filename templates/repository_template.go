@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yogayulanda/go-core/dbtx"
@@ -17,11 +18,12 @@ type sqlExecutor interface {
 }
 
 type SQLRepositoryTemplate struct {
-	db *sql.DB
+	db     *sql.DB
+	driver string
 }
 
-func NewSQLRepositoryTemplate(db *sql.DB) *SQLRepositoryTemplate {
-	return &SQLRepositoryTemplate{db: db}
+func NewSQLRepositoryTemplate(db *sql.DB, driver string) *SQLRepositoryTemplate {
+	return &SQLRepositoryTemplate{db: db, driver: strings.ToLower(strings.TrimSpace(driver))}
 }
 
 func (r *SQLRepositoryTemplate) Create(ctx context.Context, in ServiceInput) (ServiceOutput, error) {
@@ -35,9 +37,15 @@ func (r *SQLRepositoryTemplate) Create(ctx context.Context, in ServiceInput) (Se
 	}
 
 	id := fmt.Sprintf("id-%d", time.Now().UnixNano())
+	query := `INSERT INTO entities (id, subject_id, amount, created_at) VALUES (?, ?, ?, ?)`
+	if r.driver == "sqlserver" {
+		query = `INSERT INTO entities (id, subject_id, amount, created_at) VALUES (@p1, @p2, @p3, @p4)`
+	} else if r.driver != "mysql" {
+		return ServiceOutput{}, fmt.Errorf("unsupported SQL template driver %q", r.driver)
+	}
 	_, err := exec.ExecContext(
 		ctx,
-		`INSERT INTO entities (id, subject_id, amount, created_at) VALUES (?, ?, ?, ?)`,
+		query,
 		id,
 		in.SubjectID,
 		in.Amount,

@@ -1,216 +1,65 @@
 # Migration Guide
 
-This file tracks consumer-visible upgrade changes for `go-core`.
-Starting at `v1.0.0`, it is the canonical upgrade note for semver-governed releases.
+This file distinguishes the public tagged v1 line from the prepared internal foundation refresh. The internal refresh described below is **not released or tagged**; `D-PATH` remains open. Apply it only when the internal module path and adoption window are approved.
 
-Add an entry here when a change affects how a consuming service upgrades, including:
+## Public v1.0.x History
 
-- exported API changes
-- config or env contract changes
-- runtime behavior changes that require service adjustment
-- transport/auth/error behavior changes visible to consumers
-- observability contract changes that affect dashboards or alerts
+- `v1.0.0` established the public stable baseline.
+- `v1.0.1` was an OSS-readiness patch; it intended no runtime or public Go API changes.
 
-Do not add entries for internal-only cleanup with no upgrade impact.
+## Prepared Internal 1.0.0 Refresh
 
-## v1 baseline
+The following changes are consumer-visible breaking changes. Plan them together with service migrations; do not infer that a released internal module/tag exists.
 
-`v1.0.0` is the first stable compatibility baseline for downstream adopters.
-Entries below capture consumer-visible changes that landed before the first stable tag and therefore define the upgrade surface into `v1`.
+### Configuration and databases
 
-## 1) `app.New` now requires context
+- Only `sqlserver` and `mysql` database drivers are supported.
+- Config loading now uses the supported env contract in `.env.example` and `docs/CONFIGURATION_PROFILES.md`. Removed per-DB pool/TLS/shutdown/migration env overrides do not change runtime settings; set those values in code configuration instead.
+- `KAFKA_USERNAME` requires `KAFKA_PASSWORD` and `KAFKA_SASL_MECHANISM` (`PLAIN`, `SCRAM-SHA-256`, or `SCRAM-SHA-512`). `KAFKA_JKS_FILE` accepts JKS or PEM trust material; `KAFKA_JKS_PASSWORD` is for JKS.
 
-Before:
+### Errors and gateway responses
 
-```go
-application, err := app.New(cfg)
-```
+- Error codes are open strings resolved by the registry. Use `errors.New`, `errors.Wrap`, and `errors.Validation`; register custom definitions with `errors.Register`. The previous closed category/domain/build surface is not supported.
+- Gateway responses use `status`, `response_code`, `message`, `request_id`, and `timestamp`; successful responses include `data`; validation failures may include `details`. `CORE-1005` represents HTTP 413 body-limit failures. Unknown codes resolve to `CORE-9000`.
+- Response-code metadata is transported between gRPC and the gateway and stripped from public HTTP headers.
 
-After:
+### Logging and request identity
 
-```go
-application, err := app.New(ctx, cfg)
-```
+- Logs use ECS JSON except `APP_ENV=local`, which uses the console encoder. Identity uses `labels.request_id`, `labels.gtid`, `user.id`, `client.ip`, and `user_agent.original`.
+- Access/service/database/event/transaction fields use the documented `app.*` and ECS fields. Consumers with dashboard queries based on legacy keys must update them.
+- A gateway request that reaches gRPC has one access log from the gRPC interceptor. Gateway logs are reserved for failures before gRPC.
 
-## 2) Deprecated app cache getter removed
+### HTTP and gRPC clients
 
-Removed:
+- HTTP retries are disabled by default; opt in per client with `httpclient.WithRetry`.
+- Received HTTP responses, including 5xx, return `(response, nil)`. Transport failures return `*httpclient.TransportError` with phase and kind.
+- Request ID, user ID, and registered labels are forwarded by HTTP only with `WithInternalPropagation()`; they are never forwarded by default. Body logging requires `WithBodyLogging(masker)` and has no default-on mode.
+- `grpcclient.NewClient` adds request identity propagation, OTel stats, per-call logging/metrics, keepalive, and a 30-second deadline only when the context has no deadline. Service-config retries are disabled. Configure transport credentials explicitly for TLS; plaintext matches the default server configuration.
 
-```go
-application.Cache()
-```
+### Kafka, outbox, and audit events
 
-Use explicit cache selection:
+- Kafka consumer concurrency is assigned by partition; each partition is processed and committed in order. Failed processing blocks later offsets on that partition unless the message is successfully sent to DLQ and committed.
+- DLQ messages preserve original headers and add `x-dlq-reason` and `x-original-topic`.
+- Existing outbox tables are incompatible. Migrate to identity `id`, UUID `event_id`, `topic`, `msg_key`, `payload`, `headers`, `status`, `attempt`, `last_error`, `available_at`, `locked_until`, `created_at`, and `sent_at` using the SQL Server or MySQL schema in `docs/MESSAGING_PATTERN.md`.
+- Outbox workers claim rows with leases, publish outside the claim transaction, retry with backoff, and mark exhausted events `DEAD`. `DEAD` blocks later events for the same key.
+- `outbox.Publisher.PublishAudit` validates CloudEvents 1.0 attributes including UUID `ce_id`, `ce_subject`, and `ce_sequence`; consumers read restored values with `messaging.CloudEventsFromContext(ctx)`.
 
-```go
-application.RedisCache()
-application.MemcachedCache()
-```
+### Diagnostics and shutdown
 
-## 3) Cache interface `Get` now returns bytes
+- The gateway uses matched route-template metric labels; unmatched requests use `unmatched`.
+- `DIAG_ENABLED` defaults to true. The watcher emits bounded diagnostic snapshots on configured goroutine/cgroup-heap thresholds, with a shared cooldown. Disable with `DIAG_ENABLED=false` when required by local policy.
+- Shutdown defaults are `DrainDelay=3s` and `ShutdownTimeout=25s`; readiness returns 503 and gRPC health becomes `NOT_SERVING` during drain.
 
-Before:
+### Constructor and test-helper changes
 
-```go
-value, err := cacheClient.Get(ctx, key) // string
-```
+- `logger.New` accepts functional options (`logger.WithEnvironment`, `logger.WithConfig`, `logger.WithOutput`). `logger.NewWithOptions` is removed.
+- `database.New` accepts `database.WithSlowQueryThreshold`. `database.NewWithLogConfig` is removed.
+- `coretest` is a test-only helper package for a recording logger, fake publisher, response registry isolation, and reusable HTTP transport fixtures.
 
-After:
+## Still Blocked / Deferred
 
-```go
-value, err := cacheClient.Get(ctx, key) // []byte
-```
-
-## 4) Security claims are now generic only
-
-Removed legacy fields from `security.Claims`:
-- `UserID`
-- `AccountNo`
-- `Phone`
-- `CIFCode`
-
-Use:
-- `Subject`
-- `SessionID`
-- `Role`
-- `Attributes`
-
-## 5) Metadata extractor header contract changed
-
-When `INTERNAL_JWT_ENABLED=false`, supported headers are now:
-- `x-subject`
-- `x-session-id`
-- `x-role`
-- `x-claim-<name>`
-
-Legacy headers (`x-user-id`, `x-user-role`, `x-session-*`) are no longer mapped.
-
-## 6) JWT claim mapping tightened
-
-Mapped claims:
-- `sub` -> `Claims.Subject`
-- `session_id`/`sid` -> `Claims.SessionID`
-- `role` -> `Claims.Role`
-- `attributes` object -> `Claims.Attributes`
-
-Legacy fallback mapping from `user_id`, `uid`, `account_no`, etc. has been removed.
-
-## 7) Outbox publisher option rename finalized
-
-Removed:
-
-```go
-outbox.WithDriver("mysql")
-```
-
-Use:
-
-```go
-outbox.WithPublisherDriver("mysql")
-```
-
-## 8) Logger timezone behavior changed
-
-Previously logger timestamps were hardcoded to `Asia/Jakarta`.
-
-Now:
-- default timezone is `UTC`
-- optional env var `LOG_TIMEZONE` (IANA name) can override it.
-
-## 9) Startup readiness helper signature changed
-
-Before:
-
-```go
-server.LogStartupReadiness(ctx, log, grpcPort, httpPort, timeout)
-```
-
-After:
-
-```go
-server.LogStartupReadiness(ctx, log, grpcPort, httpPort, timeout, httpTLSEnabled)
-```
-
-## 10) OTLP transport is TLS-first by default
-
-Before:
-- OTLP exporter always used insecure transport.
-
-Now:
-- TLS is default for OTLP exporter.
-- To keep insecure transport (local/dev only), set:
-  - `OTEL_EXPORTER_OTLP_INSECURE=true`
-- For custom CA, set:
-  - `OTEL_EXPORTER_OTLP_CA_CERT_FILE=/path/to/ca.pem`
-
-## 11) Migration autorun now has an additive logger-aware variant
-
-Existing explicit startup migration remains valid:
-
-```go
-if err := migration.AutoRunUp(cfg); err != nil {
-    return err
-}
-```
-
-You may now opt into runtime signals without changing migration ownership:
-
-```go
-if err := migration.AutoRunUpWithLogger(cfg, application.Logger()); err != nil {
-    return err
-}
-```
-
-Behavior notes:
-- startup migration remains explicit and service-owned
-- lock safety semantics are unchanged
-- logger-aware autorun emits `migration_autorun` and `migration_lock` `ServiceLog`
-
-## 12) Database initialization now includes GORM
-
-`database.New` now returns a wrapper that includes a GORM instance (`*gorm.DB`).
-
-Before:
-- Only raw `*sql.DB` was supported.
-
-Now:
-```go
-db, err := database.New(cfg, log)
-gormInstance := db.Gorm() // Access the pre-initialized GORM DB
-```
-
-GORM is initialized with `PrepareStmt: true` and `SingularTable: true` by default.
-
-## 13) Enhanced Kafka configuration for SASL/JKS support
-
-Kafka configuration has been expanded to support SASL Plain authentication and JKS certificates.
-
-New environment variables:
-- `KAFKA_USERNAME`
-- `KAFKA_PASSWORD`
-- `KAFKA_JKS_FILE`
-- `KAFKA_JKS_PASSWORD`
-
-These are optional and only used when `KAFKA_ENABLED=true`.
-
-## 14) Error Contract Standardization
-
-The `errors` package now enforces a strict `<DOMAIN>-<CATEGORY>-<NUMBER>` formatting logic with explicit `Finality`. 
-
-`AppError` and the HTTP `ErrorResponse` have been refactored:
-- `RequestID` was removed from the HTTP payload, replaced by `TraceID` and `TransactionID`.
-- `Success: false` is now explicitly added to the JSON response.
-- `Category` now uses strict acronyms (`VAL`, `AUTH`, `SES`, `SWI`, `DB`, `REC`).
-- Downstream services should use `errors.Build(domain, category, number)` to craft errors.
-
-### AppError Migration Table
-
-| v1 AppError | v2 AppError (Dynamic Builder) |
-| --- | --- |
-| `errors.Validation(msg, details)` | `errors.Build(domain, CategoryVAL, num).Message(msg).Details(details...).Done()` |
-| `errors.New(CodeUnauthorized, msg)` | `errors.Build(domain, CategoryAUTH, num).Message(msg).Done()` |
-| `errors.New(CodeNotFound, msg)` | `errors.Build(domain, CategoryDB, num).Message(msg).Done()` |
-| `errors.New(CodeServiceUnavailable, msg)` | `errors.Build(domain, CategorySWI, num).Message(msg).Retryable(true).Done()` |
-| `errors.New(CodeInternal, msg)` | `errors.Build(domain, CategoryREC, num).Message(msg).Done()` |
-
-*Note: For `v2`, you must provide the `domain` (e.g., `TRF`, `AUTH`) and `number` (e.g., `001`) from your bounded context's error catalog.*
+- `GC-23`: Elastic tracing backend/agent policy.
+- `GC-24`: metrics enablement policy.
+- `D-PATH`: internal module path; no tag was created.
+- `Q-SIG`: confirmation of the existing HTTP signature scheme.
+- SQL Server/MySQL outbox integration tests require Docker and were not run in the implementation environment (S8).

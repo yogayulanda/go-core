@@ -1,38 +1,23 @@
 # TODO Backlog
 
-This backlog lists improvement areas that are still untouched or only lightly touched relative to the newer foundation direction.
+This backlog tracks work intentionally left outside the completed internal foundation batches. Do not interpret deferred items as implemented defaults.
 
-## P1
+## Release-Blocking Decisions
 
-Recently completed:
+- `GC-23`: choose OTLP-to-Elastic APM versus the Elastic APM Go agent; current code uses the existing OTLP gRPC exporter configured by `APM_ENDPOINT`.
+- `GC-24`: decide metrics enablement policy/default and whether `app_transaction_total` is removed or incremented. The metric is currently registered but not incremented.
+- `D-PATH`: approve the internal module path and perform the human-controlled path/tag release work (`WS-9`). No tag or module-path change was made in this workspace.
+- `Q-SIG`: confirm the existing HTTP signature scheme with a consuming service before changing its wire contract.
 
-- runtime orchestration:
-  `app/` and `server/` now emit aligned `ServiceLog` for init, startup, readiness, orchestration, shutdown, and component failure signals
-- transport alignment:
-  gRPC and gateway now emit aligned request ID, request metrics, service metrics, and structured `ServiceLog`
-- messaging and outbox runtime:
-  publisher, consumer, and outbox worker now emit aligned `ServiceLog` and additive messaging/outbox metrics without hidden startup behavior
-- examples refresh:
-  older examples now reflect the current bootstrap, logging, DB, and messaging golden path
+## Operational Follow-Up
 
-## P2
+- Run `go test -tags=integration ./messaging/outbox/...` against disposable SQL Server and MySQL instances. Integration tests compile but were not run in the implementation environment because Docker was unavailable (S8).
+- Confirm which SASL mechanism the office Kafka cluster uses. The library supports PLAIN, SCRAM-SHA-256, and SCRAM-SHA-512.
+- Review and remediate the current govulncheck advisories in pre-existing dependency versions; WS-6 did not upgrade unrelated modules.
+- Confirm deployment termination grace period exceeds `DrainDelay + ShutdownTimeout` (default total 28 seconds, below the common 30-second value but leaves little margin).
 
-- cache ergonomics and observability:
-  align Redis and Memcached behavior with DB-style health and service logging expectations
-- error contract hardening:
-  strengthen REST/gRPC mapping consistency and service-facing error guidance
-- security observability:
-  make extractor/JWT behavior easier to operate and diagnose
-- migration adoption workflow:
-  improve migration runtime signals and upgrade guidance
+## Deferred Platform Work
 
-## P3
-
-- resilience observability:
-  connect retry/timeout helpers with better logging and usage guidance
-- script and gate alignment:
-  evolve local scripts and lint gates to reflect foundation maturity
-- versioning and upgrade discipline:
-  define clearer version/change expectations for future multi-service adoption
-- legacy `.ai` task cleanup:
-  refresh older tasks that predate the current foundation direction
+- GitLab CI (`GC-02`) is not part of the approved internal release scope; current CI remains GitHub Actions.
+- Inbox/idempotency helper (`GC-37`) is explicitly excluded.
+- Dashboard, alert thresholds, data retention, and client-IP privacy retention remain deployment/platform responsibilities.

@@ -4,7 +4,7 @@
 
 ## Features
 
-- **Resilience**: Integrated with `sony/gobreaker` for circuit breaking; retries are opt-in.
+- **Resilience**: Integrated with `sony/gobreaker` for circuit breaking; retries are disabled by default and opt-in.
 - **Observability**: Automatically propagates OpenTelemetry spans and emits structured `ServiceLog`.
 - **Sensible Defaults**: Timeout, retry, and circuit breaker policies come with pre-configured defaults aligned with `go-core` standards.
 
@@ -41,6 +41,8 @@ resp, err := client.Get(ctx, "https://api.external.com/v1/health")
 ### Advanced Configuration
 
 ```go
+import "github.com/yogayulanda/go-core/resilience"
+
 client := httpclient.NewClient(log,
     httpclient.WithTimeout(10 * time.Second),
     httpclient.WithIdleConnTimeout(30 * time.Second),

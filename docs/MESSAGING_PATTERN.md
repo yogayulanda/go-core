@@ -52,7 +52,7 @@ Matching test fixtures are maintained at `messaging/outbox/testdata/schema_sqlse
 
 Use this document as the canonical messaging and outbox consumption pattern for services using `go-core`.
 
-Kafka authentication is configured with `KAFKA_USERNAME`, `KAFKA_PASSWORD`, and `KAFKA_SASL_MECHANISM` (`PLAIN`, `SCRAM-SHA-256`, or `SCRAM-SHA-512`). `KAFKA_JKS_FILE` accepts either a JKS truststore/keystore or a PEM bundle; `KAFKA_JKS_PASSWORD` is used for JKS files. Producer, consumer, and readiness checks share the same configuration.
+Kafka authentication is configured with `KAFKA_USERNAME`, `KAFKA_PASSWORD`, and `KAFKA_SASL_MECHANISM` (`PLAIN`, `SCRAM-SHA-256`, or `SCRAM-SHA-512`). `KAFKA_JKS_FILE` accepts either a JKS truststore/keystore or a PEM bundle; `KAFKA_JKS_PASSWORD` is used for JKS files. Producer, consumer, and readiness checks share the same configuration. The office's selected SASL mechanism remains an operations question; all three mechanisms are supported.
 
 ## When To Use Direct Publisher
 
@@ -68,7 +68,8 @@ Recommended ownership:
 - service decides retry and DLQ policy through publisher options
 - publisher lifecycle stays explicit through `app.NewKafkaPublisher(...)`
 - app-level helper now injects foundation logger + messaging metrics defaults automatically
-- supports SASL Plain authentication and JKS certificates via configuration
+- supports SASL PLAIN/SCRAM and JKS/PEM TLS via configuration
+- propagates `x-request-id`, `x-user-id`, and registered propagated labels when headers are absent
 
 ## When To Use Outbox
 
@@ -86,6 +87,8 @@ Recommended pattern:
 4. commit once
 5. let the outbox worker publish pending rows later
 
+`PublishAudit` uses CloudEvents 1.0 headers (`ce_specversion`, `ce_id`, `ce_type`, `ce_source`, `ce_time`, `ce_subject`, `ce_sequence`), requires a UUID ID, and logs only event metadata. The consumer restores context identity and exposes validated/received CloudEvents fields through `messaging.CloudEventsFromContext(ctx)`.
+
 ## Worker Ownership
 
 `go-core` intentionally does not start the outbox worker automatically.
@@ -102,6 +105,8 @@ Recommended runtime hooks:
 
 - use `outbox.Worker.StartChecked(ctx)` for service-owned background execution
 - use `outbox.Worker.RunOnce(ctx)` for tests, admin jobs, or explicit single-batch control
+
+Worker claims are leased and committed in a short database transaction. Kafka publish happens outside the transaction, then the row is independently marked `SENT`, returned to `PENDING` with an incremented attempt/backoff, or moved to `DEAD` at the attempt limit. Ordering is enforced per key; a `DEAD` row blocks later rows for that key. Consumers process and commit each partition in offset order; configured concurrency is across partitions. Successful DLQ publication preserves input headers and adds `x-dlq-reason` and `x-original-topic`.
 
 ## Runtime Observability
 
