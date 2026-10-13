@@ -37,7 +37,7 @@ func TestLoggerNew_ImplementsExpandedInterface(t *testing.T) {
 
 func TestJSONLoggerUsesECSUTCMillisecondsWithoutANSI(t *testing.T) {
 	output := &bytes.Buffer{}
-	log, err := NewWithOptions("ecs-test", "debug", Options{Environment: "dev", Output: output})
+	log, err := New("ecs-test", "debug", WithEnvironment("dev"), WithOutput(output))
 	if err != nil {
 		t.Fatalf("create logger: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestJSONLoggerUsesECSUTCMillisecondsWithoutANSI(t *testing.T) {
 
 func TestLocalConsoleEncoderFormatAndEventColors(t *testing.T) {
 	output := &bytes.Buffer{}
-	log, err := NewWithOptions("local-test", "debug", Options{Environment: "local", Output: output})
+	log, err := New("local-test", "debug", WithEnvironment("local"), WithOutput(output))
 	if err != nil {
 		t.Fatalf("create logger: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestMaskSensitiveValuesAndPreserveSafeValues(t *testing.T) {
 
 func TestAccessLogSlowFlagAndClassMarkers(t *testing.T) {
 	output := &bytes.Buffer{}
-	log, err := NewWithOptions("access-test", "debug", Options{Environment: "dev", Output: output, Config: Config{SlowRequestThreshold: time.Second}})
+	log, err := New("access-test", "debug", WithEnvironment("dev"), WithOutput(output), WithConfig(Config{SlowRequestThreshold: time.Second}))
 	if err != nil {
 		t.Fatalf("create logger: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestAccessLogSlowFlagAndClassMarkers(t *testing.T) {
 
 func TestEventLogUsesECSContract(t *testing.T) {
 	output := &bytes.Buffer{}
-	log, err := NewWithOptions("event-test", "info", Options{Environment: "dev", Output: output})
+	log, err := New("event-test", "info", WithEnvironment("dev"), WithOutput(output))
 	if err != nil {
 		t.Fatalf("create logger: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestEventLogUsesECSContract(t *testing.T) {
 
 func TestDBLogSlowMarkerAndThreshold(t *testing.T) {
 	output := &bytes.Buffer{}
-	log, err := NewWithOptions("db-slow-test", "debug", Options{Environment: "dev", Output: output, Config: Config{SlowQueryThreshold: time.Second}})
+	log, err := New("db-slow-test", "debug", WithEnvironment("dev"), WithOutput(output), WithConfig(Config{SlowQueryThreshold: time.Second}))
 	if err != nil {
 		t.Fatalf("create logger: %v", err)
 	}
@@ -204,7 +204,7 @@ func stringField(fields map[string]interface{}, key string) string {
 
 func TestDBLogBelowThresholdOmitsSlowFlag(t *testing.T) {
 	output := &bytes.Buffer{}
-	log, err := NewWithOptions("db-fast-test", "debug", Options{Environment: "dev", Output: output, Config: Config{SlowQueryThreshold: time.Second}})
+	log, err := New("db-fast-test", "debug", WithEnvironment("dev"), WithOutput(output), WithConfig(Config{SlowQueryThreshold: time.Second}))
 	if err != nil {
 		t.Fatalf("create logger: %v", err)
 	}

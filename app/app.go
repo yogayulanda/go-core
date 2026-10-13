@@ -16,7 +16,7 @@ import (
 	coreversion "github.com/yogayulanda/go-core/version"
 )
 
-var newDatabaseFn = database.NewWithLogConfig
+var newDatabaseFn = database.New
 var ErrKafkaDisabled = errors.New("kafka disabled")
 
 type App struct {
@@ -44,15 +44,15 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	startedAt := time.Now()
 
 	// 1. Logger
-	log, err := logger.NewWithOptions(cfg.App.ServiceName, cfg.App.LogLevel, logger.Options{
-		Environment: cfg.App.Environment,
-		Config: logger.Config{
+	log, err := logger.New(cfg.App.ServiceName, cfg.App.LogLevel,
+		logger.WithEnvironment(cfg.App.Environment),
+		logger.WithConfig(logger.Config{
 			MaskKeys:             cfg.Log.MaskKeys,
 			RequestStart:         cfg.Log.RequestStart,
 			SlowQueryThreshold:   cfg.Log.SlowQueryThreshold,
 			SlowRequestThreshold: cfg.Log.SlowRequestThreshold,
-		},
-	})
+		}),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("init logger failed: %w", err)
 	}
@@ -82,7 +82,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	dbs := make(map[string]*database.DB)
 	for rawName, dbCfg := range cfg.Databases {
 		name := config.NormalizeDBAlias(rawName)
-		db, err := newDatabaseFn(dbCfg, log, cfg.Log.SlowQueryThreshold)
+		db, err := newDatabaseFn(dbCfg, log, database.WithSlowQueryThreshold(cfg.Log.SlowQueryThreshold))
 		if err != nil {
 			if dbCfg.Required {
 				return nil, fmt.Errorf("init database[%s] failed: %w", name, err)

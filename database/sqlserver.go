@@ -20,12 +20,25 @@ type DB struct {
 	gorm *gorm.DB
 }
 
-// New initializes database connection pool and GORM instance.
-func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
-	return NewWithLogConfig(cfg, log, time.Second)
+type Option func(*Options)
+
+type Options struct {
+	SlowQueryThreshold time.Duration
 }
 
-func NewWithLogConfig(cfg config.DBConfig, log logger.Logger, slowQueryThreshold time.Duration) (*DB, error) {
+func WithSlowQueryThreshold(threshold time.Duration) Option {
+	return func(options *Options) { options.SlowQueryThreshold = threshold }
+}
+
+// New initializes database connection pool and GORM instance.
+func New(cfg config.DBConfig, log logger.Logger, options ...Option) (*DB, error) {
+	settings := Options{SlowQueryThreshold: time.Second}
+	for _, option := range options {
+		if option != nil {
+			option(&settings)
+		}
+	}
+	slowQueryThreshold := settings.SlowQueryThreshold
 	startedAt := time.Now()
 	if _, err := gormDialector(cfg.Driver, nil); err != nil {
 		return nil, err

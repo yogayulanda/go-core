@@ -26,6 +26,20 @@ type Options struct {
 	Output      io.Writer
 }
 
+type Option func(*Options)
+
+func WithEnvironment(environment string) Option {
+	return func(options *Options) { options.Environment = environment }
+}
+
+func WithConfig(config Config) Option {
+	return func(options *Options) { options.Config = config }
+}
+
+func WithOutput(output io.Writer) Option {
+	return func(options *Options) { options.Output = output }
+}
+
 type Config struct {
 	MaskKeys             []string
 	RequestStart         bool
@@ -33,22 +47,24 @@ type Config struct {
 	SlowRequestThreshold time.Duration
 }
 
-func New(serviceName string, level string) (Logger, error) {
-	return NewWithOptions(serviceName, level, Options{})
-}
-
-func NewWithOptions(serviceName string, level string, options Options) (Logger, error) {
+func New(serviceName string, level string, options ...Option) (Logger, error) {
+	var cfg Options
+	for _, option := range options {
+		if option != nil {
+			option(&cfg)
+		}
+	}
 	parsedLevel, err := parseLevel(level)
 	if err != nil {
 		return nil, err
 	}
-	output := options.Output
+	output := cfg.Output
 	if output == nil {
 		output = os.Stdout
 	}
 	writeSyncer := zapcore.AddSync(output)
 	var core zapcore.Core
-	if isLocalEnvironment(options.Environment) {
+	if isLocalEnvironment(cfg.Environment) {
 		core = newConsoleCore(writeSyncer, parsedLevel, isTTY(output))
 	} else {
 		encoderConfig := ecszap.NewDefaultEncoderConfig()
@@ -59,10 +75,10 @@ func NewWithOptions(serviceName string, level string, options Options) (Logger, 
 	}
 	base := zap.New(core).With(
 		zap.String("service.name", serviceName),
-		zap.String("service.environment", options.Environment),
+		zap.String("service.environment", cfg.Environment),
 		zap.String("service.version", version.Version),
 	)
-	return &zapLogger{l: base, config: options.Config}, nil
+	return &zapLogger{l: base, config: cfg.Config}, nil
 }
 
 func ecsTimeEncoder(t time.Time, encoder zapcore.PrimitiveArrayEncoder) {
