@@ -146,9 +146,13 @@ func availablePort(t *testing.T) int {
 	if err != nil {
 		t.Fatalf("reserve port: %v", err)
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
+	address, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		_ = listener.Close()
+		t.Fatal("reserved listener did not return a TCP address")
+	}
 	if err := listener.Close(); err != nil {
 		t.Fatalf("release reserved port: %v", err)
 	}
-	return port
+	return address.Port
 }
