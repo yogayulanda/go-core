@@ -203,8 +203,10 @@ func GooseDialect(driver string) string {
 	switch strings.ToLower(strings.TrimSpace(driver)) {
 	case "sqlserver":
 		return "mssql"
+	case "mysql":
+		return "mysql"
 	default:
-		return strings.ToLower(strings.TrimSpace(driver))
+		return ""
 	}
 }
 
@@ -256,11 +258,8 @@ func acquireMigrationLock(
 		return acquireSQLServerLock(ctx, db, lockKey, timeout)
 	case "mysql":
 		return acquireMySQLLock(ctx, db, lockKey, timeout)
-	case "postgres":
-		return acquirePostgresLock(ctx, db, lockKey, timeout)
 	default:
-		// Graceful no-op for unsupported drivers.
-		return func(context.Context) error { return nil }, nil
+		return nil, fmt.Errorf("unsupported migration database driver %q (supported: sqlserver, mysql)", driver)
 	}
 }
 
@@ -332,41 +331,6 @@ func acquireMySQLLock(
 		var _ignored sql.NullInt64
 		return db.QueryRowContext(releaseCtx, `SELECT RELEASE_LOCK(?)`, lockKey).Scan(&_ignored)
 	}, nil
-}
-
-func acquirePostgresLock(
-	ctx context.Context,
-	db *sql.DB,
-	lockKey string,
-	timeout time.Duration,
-) (releaseLockFunc, error) {
-	deadline := time.Now().Add(timeout)
-	for {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-
-		var locked bool
-		err := db.QueryRowContext(ctx, `SELECT pg_try_advisory_lock(hashtext($1))`, lockKey).Scan(&locked)
-		if err != nil {
-			return nil, fmt.Errorf("acquire postgres migration lock failed: %w", err)
-		}
-		if locked {
-			return func(releaseCtx context.Context) error {
-				var _ignored bool
-				return db.QueryRowContext(
-					releaseCtx,
-					`SELECT pg_advisory_unlock(hashtext($1))`,
-					lockKey,
-				).Scan(&_ignored)
-			}, nil
-		}
-
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("acquire postgres migration lock failed: lock timeout")
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
 }
 
 func defaultMigrationLockKey(cfg *config.Config, dbName string) string {

@@ -85,7 +85,6 @@ func NewWorkerWithOptions(
 		batchSize: 50,
 		interval:  2 * time.Second,
 		stopChan:  make(chan struct{}),
-		driver:    "mysql",
 	}
 
 	for _, opt := range opts {
@@ -299,11 +298,6 @@ func buildSelectPendingQuery(driver string, batchSize int) (string, []interface{
 	colKey := keyColumnByDriver(driver)
 
 	switch normalizeDriver(driver) {
-	case "postgres":
-		return fmt.Sprintf(
-			`SELECT id, topic, %s, payload, headers FROM outbox_events WHERE published_at IS NULL ORDER BY id FOR UPDATE SKIP LOCKED LIMIT $1`,
-			colKey,
-		), []interface{}{batchSize}
 	case "sqlserver":
 		return fmt.Sprintf(
 			`SELECT TOP (@p1) id, topic, %s, payload, headers FROM outbox_events WITH (UPDLOCK, READPAST, ROWLOCK) WHERE published_at IS NULL ORDER BY id`,
@@ -319,8 +313,6 @@ func buildSelectPendingQuery(driver string, batchSize int) (string, []interface{
 
 func buildMarkPublishedQuery(driver string, id int64) (string, []interface{}) {
 	switch normalizeDriver(driver) {
-	case "postgres":
-		return "UPDATE outbox_events SET published_at = NOW() WHERE id = $1", []interface{}{id}
 	case "sqlserver":
 		return "UPDATE outbox_events SET published_at = SYSDATETIME() WHERE id = @p1", []interface{}{id}
 	default:
@@ -344,6 +336,9 @@ func (w *Worker) Validate() error {
 	}
 	if w.log == nil {
 		return errors.New("outbox worker logger is nil")
+	}
+	if normalizeDriver(w.driver) == "" {
+		return fmt.Errorf("unsupported outbox database driver %q (supported: sqlserver, mysql)", w.driver)
 	}
 	return nil
 }

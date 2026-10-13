@@ -27,11 +27,6 @@ func TestBuildSelectPendingQuery_ByDriver(t *testing.T) {
 			wantContain: "LIMIT ? FOR UPDATE SKIP LOCKED",
 		},
 		{
-			name:        "postgres",
-			driver:      "postgres",
-			wantContain: "FOR UPDATE SKIP LOCKED LIMIT $1",
-		},
-		{
 			name:        "sqlserver",
 			driver:      "sqlserver",
 			wantContain: "SELECT TOP (@p1)",
@@ -63,11 +58,6 @@ func TestBuildMarkPublishedQuery_ByDriver(t *testing.T) {
 			wantContain: "CURRENT_TIMESTAMP",
 		},
 		{
-			name:        "postgres",
-			driver:      "postgres",
-			wantContain: "NOW()",
-		},
-		{
 			name:        "sqlserver",
 			driver:      "sqlserver",
 			wantContain: "SYSDATETIME()",
@@ -87,10 +77,10 @@ func TestBuildMarkPublishedQuery_ByDriver(t *testing.T) {
 	}
 }
 
-func TestNormalizeDriver_UnknownFallbackToMySQL(t *testing.T) {
+func TestNormalizeDriver_UnknownReturnsEmpty(t *testing.T) {
 	got := normalizeDriver("unknown")
-	if got != "mysql" {
-		t.Fatalf("expected mysql fallback, got %s", got)
+	if got != "" {
+		t.Fatalf("expected empty unsupported driver, got %s", got)
 	}
 }
 
@@ -140,9 +130,16 @@ func TestWorkerValidate_MissingDeps_ReturnError(t *testing.T) {
 }
 
 func TestWorkerValidate_AllDepsPresent_ReturnNil(t *testing.T) {
-	w := NewWorkerWithOptions(&sql.DB{}, stubPublisher{}, stubLogger{})
+	w := NewWorkerWithOptions(&sql.DB{}, stubPublisher{}, stubLogger{}, WithWorkerDriver("mysql"))
 	if err := w.Validate(); err != nil {
 		t.Fatalf("unexpected validation error: %v", err)
+	}
+}
+
+func TestWorkerValidate_UnsupportedDriver_ReturnsError(t *testing.T) {
+	w := NewWorkerWithOptions(&sql.DB{}, stubPublisher{}, stubLogger{}, WithWorkerDriver("postgres"))
+	if err := w.Validate(); err == nil {
+		t.Fatal("expected unsupported driver error")
 	}
 }
 
@@ -162,7 +159,7 @@ func TestWorkerStartChecked_DoubleStartProtected(t *testing.T) {
 	}
 	defer db.Close()
 
-	w := NewWorkerWithOptions(db, stubPublisher{}, stubLogger{})
+	w := NewWorkerWithOptions(db, stubPublisher{}, stubLogger{}, WithWorkerDriver("mysql"))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -193,6 +190,7 @@ func TestWorkerRunOnce_EmptyBatch_EmitsMetric(t *testing.T) {
 		stubPublisher{},
 		stubLogger{},
 		WithWorkerMetrics(metrics, "outbox-empty-test"),
+		WithWorkerDriver("mysql"),
 	)
 
 	if err := w.RunOnce(context.Background()); err != nil {
@@ -227,6 +225,7 @@ func TestWorkerRunOnce_SuccessBatch_EmitsMetric(t *testing.T) {
 		stubPublisher{},
 		stubLogger{},
 		WithWorkerMetrics(metrics, "outbox-success-test"),
+		WithWorkerDriver("mysql"),
 	)
 
 	if err := w.RunOnce(context.Background()); err != nil {
@@ -268,6 +267,7 @@ func TestWorkerRunOnce_PublishFailure_ReturnsError(t *testing.T) {
 		failingPublisher{},
 		stubLogger{},
 		WithWorkerMetrics(metrics, "outbox-failure-test"),
+		WithWorkerDriver("mysql"),
 	)
 
 	if err := w.RunOnce(context.Background()); err == nil {
@@ -302,6 +302,7 @@ func TestWorkerRunOnce_CommitFailure_ReturnsError(t *testing.T) {
 		stubPublisher{},
 		stubLogger{},
 		WithWorkerMetrics(metrics, "outbox-commit-test"),
+		WithWorkerDriver("mysql"),
 	)
 
 	if err := w.RunOnce(context.Background()); err == nil {

@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yogayulanda/go-core/config"
 	"github.com/yogayulanda/go-core/logger"
+	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
@@ -21,6 +23,9 @@ type DB struct {
 // New initializes database connection pool and GORM instance.
 func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
 	startedAt := time.Now()
+	if _, err := gormDialector(cfg.Driver, nil); err != nil {
+		return nil, err
+	}
 
 	db, err := sql.Open(cfg.Driver, cfg.DSN)
 	if err != nil {
@@ -62,9 +67,11 @@ func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
 	}
 
 	// Initialize GORM
-	gormDB, err := gorm.Open(sqlserver.New(sqlserver.Config{
-		Conn: db,
-	}), &gorm.Config{
+	dialector, err := gormDialector(cfg.Driver, db)
+	if err != nil {
+		return nil, err
+	}
+	gormDB, err := gorm.Open(dialector, &gorm.Config{
 		PrepareStmt: true,
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
@@ -88,6 +95,17 @@ func New(cfg config.DBConfig, log logger.Logger) (*DB, error) {
 	})
 
 	return &DB{DB: db, gorm: gormDB}, nil
+}
+
+func gormDialector(driver string, conn gorm.ConnPool) (gorm.Dialector, error) {
+	switch strings.ToLower(strings.TrimSpace(driver)) {
+	case "sqlserver":
+		return sqlserver.New(sqlserver.Config{Conn: conn}), nil
+	case "mysql":
+		return mysql.New(mysql.Config{Conn: conn}), nil
+	default:
+		return nil, fmt.Errorf("unsupported database driver %q (supported: sqlserver, mysql)", driver)
+	}
 }
 
 // Gorm returns the pre-initialized GORM DB instance.

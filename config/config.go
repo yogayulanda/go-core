@@ -25,16 +25,18 @@ func (e *ValidationErrors) Error() string {
 }
 
 type Config struct {
-	App           AppConfig
-	Databases     map[string]DBConfig
-	Migration     MigrationConfig
-	GRPC          GRPCConfig
-	HTTP          HTTPConfig
-	Observability ObservabilityConfig
-	Auth          AuthConfig
-	Redis         RedisConfig
-	Memcached     MemcachedConfig
-	Kafka         KafkaConfig
+	App            AppConfig
+	Databases      map[string]DBConfig
+	Migration      MigrationConfig
+	GRPC           GRPCConfig
+	HTTP           HTTPConfig
+	Observability  ObservabilityConfig
+	Diagnostics    DiagnosticsConfig
+	Auth           AuthConfig
+	Redis          RedisConfig
+	Memcached      MemcachedConfig
+	Kafka          KafkaConfig
+	IgnoredEnvVars []string
 }
 
 type AppConfig struct {
@@ -77,11 +79,12 @@ type GRPCConfig struct {
 }
 
 type HTTPConfig struct {
-	Port         int
-	TLSEnabled   bool
-	TLSCertFile  string
-	TLSKeyFile   string
-	PprofEnabled bool
+	Port               int
+	TLSEnabled         bool
+	TLSCertFile        string
+	TLSKeyFile         string
+	PprofEnabled       bool
+	CORSAllowedOrigins []string // used from WS-4
 }
 
 type ObservabilityConfig struct {
@@ -89,6 +92,10 @@ type ObservabilityConfig struct {
 	OTLPInsecure       bool
 	OTLPCACertFile     string
 	TraceSamplingRatio float64
+}
+
+type DiagnosticsConfig struct {
+	Enabled bool // used from WS-7a
 }
 
 type AuthConfig struct {
@@ -130,11 +137,12 @@ type MemcachedConfig struct {
 }
 
 type KafkaConfig struct {
-	Enabled     bool
-	Brokers     []string
-	ClientID    string
-	Username    string
-	Password    string
-	JksFile     string
-	JksPassword string
+	Enabled       bool
+	Brokers       []string
+	ClientID      string
+	Username      string
+	Password      string
+	SASLMechanism string
+	JksFile       string
+	JksPassword   string
 }

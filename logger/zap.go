@@ -2,7 +2,6 @@ package logger
 
 import (
 	"context"
-	"os"
 	"strings"
 	"time"
 
@@ -16,14 +15,22 @@ type zapLogger struct {
 	l *zap.Logger
 }
 
+type Options struct {
+	Environment string
+}
+
 func New(serviceName string, level string) (Logger, error) {
+	return NewWithOptions(serviceName, level, Options{})
+}
+
+func NewWithOptions(serviceName string, level string, options Options) (Logger, error) {
 	parsedLevel, err := parseLevel(level)
 	if err != nil {
 		return nil, err
 	}
-	logLocation := resolveLogLocation(os.Getenv("LOG_TIMEZONE"))
+	logLocation := time.UTC
 
-	isDev := isDevEnvironment(os.Getenv("APP_ENV"))
+	isDev := isDevEnvironment(options.Environment)
 	encoding := "json"
 	encodeLevel := zapcore.LowercaseLevelEncoder
 	if isDev {

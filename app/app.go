@@ -41,10 +41,13 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	startedAt := time.Now()
 
 	// 1. Logger
-	log, err := logger.New(cfg.App.ServiceName, cfg.App.LogLevel)
+	log, err := logger.NewWithOptions(cfg.App.ServiceName, cfg.App.LogLevel, logger.Options{
+		Environment: cfg.App.Environment,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("init logger failed: %w", err)
 	}
+	logIgnoredEnvironmentVariables(ctx, log, cfg.IgnoredEnvVars)
 
 	// 2. Metrics
 	metrics := observability.NewMetrics()
@@ -136,6 +139,15 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	})
 
 	return application, nil
+}
+
+func logIgnoredEnvironmentVariables(ctx context.Context, log logger.Logger, names []string) {
+	if len(names) == 0 {
+		return
+	}
+	log.Warn(ctx, "ignored removed environment variables",
+		logger.Field{Key: "environment_variables", Value: names},
+	)
 }
 
 //

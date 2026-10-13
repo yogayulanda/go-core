@@ -53,7 +53,7 @@ The intended service shape remains conventional Go:
 
 - Go 1.24+
 - gRPC and grpc-gateway
-- GORM with SQL Server support and DSN composition helpers for MySQL/PostgreSQL/SQL Server
+- GORM with SQL Server and MySQL support
 - Goose migrations
 - Kafka via `segmentio/kafka-go`
 - Redis and Memcached clients
@@ -110,35 +110,31 @@ Core variables:
 - `SERVICE_NAME`
 - `APP_ENV`
 - `LOG_LEVEL`
-- `LOG_TIMEZONE`
-- `SHUTDOWN_TIMEOUT`
 - `GRPC_PORT`
 - `HTTP_PORT`
-- `GRPC_TLS_ENABLED`, `GRPC_TLS_CERT_FILE`, `GRPC_TLS_KEY_FILE`
-- `HTTP_TLS_ENABLED`, `HTTP_TLS_CERT_FILE`, `HTTP_TLS_KEY_FILE`
+- `HTTP_CORS_ALLOWED_ORIGINS`
+- `HTTP_PPROF_ENABLED`
+- `DIAG_ENABLED`
 
 Database variables:
 
 - `DB_LIST`
-- `DB_<NAME>_DRIVER`
-- `DB_<NAME>_DSN`
+- `DB_<NAME>_DRIVER` supports `sqlserver` and `mysql`
 - `DB_<NAME>_HOST`
 - `DB_<NAME>_PORT`
 - `DB_<NAME>_NAME`
 - `DB_<NAME>_USER`
 - `DB_<NAME>_PASSWORD`
 - `DB_<NAME>_PARAMS`
-- `DB_<NAME>_REQUIRED`
 
 Optional runtime dependencies:
 
-- Redis: `REDIS_ENABLED`, `REDIS_ADDRESS`, `REDIS_PASSWORD`, `REDIS_DB`
-- Memcached: `MEMCACHED_ENABLED`, `MEMCACHED_SERVERS`, `MEMCACHED_TIMEOUT`
-- Kafka: `KAFKA_ENABLED`, `KAFKA_BROKERS`, `KAFKA_CLIENT_ID`, `KAFKA_USERNAME`, `KAFKA_PASSWORD`
-- Migrations: `MIGRATION_AUTO_RUN`, `MIGRATION_DB`, `MIGRATION_DIR`, `MIGRATION_LOCK_ENABLED`
-- Tracing: `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE`, `OTEL_EXPORTER_OTLP_CA_CERT_FILE`, `TRACE_SAMPLING_RATIO`
-- Auth: `INTERNAL_JWT_ENABLED`, `INTERNAL_JWT_PUBLIC_KEY`, `INTERNAL_JWT_JWKS_ENDPOINT`, `INTERNAL_JWT_ISSUER`, `INTERNAL_JWT_AUDIENCE`
-- HTTP signatures: `AUTH_SIGNATURE_ENABLED`, `AUTH_SIGNATURE_MASTER_KEY`
+- Redis: `REDIS_ADDRESS` enables Redis; `REDIS_PASSWORD` is optional
+- Memcached: `MEMCACHED_SERVERS` enables Memcached
+- Kafka: `KAFKA_BROKERS` enables Kafka; optional SASL uses `KAFKA_USERNAME`, `KAFKA_PASSWORD`, and `KAFKA_SASL_MECHANISM`
+- Kafka TLS: `KAFKA_JKS_FILE` and `KAFKA_JKS_PASSWORD`
+- Tracing: `APM_ENDPOINT` enables the existing OTLP gRPC exporter
+- HTTP signatures: a non-empty `AUTH_SIGNATURE_MASTER_KEY` enables signature validation
 
 See `docs/CONFIGURATION_PROFILES.md` for grouped configuration guidance.
 

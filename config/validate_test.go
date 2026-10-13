@@ -10,6 +10,7 @@ func TestValidate_InternalJWTNegativeLeeway(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
 			ServiceName: "svc",
+			Environment: "dev",
 		},
 		Auth: AuthConfig{
 			InternalJWT: InternalJWTConfig{
@@ -24,7 +25,7 @@ func TestValidate_InternalJWTNegativeLeeway(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "INTERNAL_JWT_LEEWAY must be >= 0") {
+	if !strings.Contains(err.Error(), "InternalJWT Leeway must be >= 0") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -33,6 +34,7 @@ func TestValidate_InternalJWTIncludeExcludeConflict(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
 			ServiceName: "svc",
+			Environment: "dev",
 		},
 		Auth: AuthConfig{
 			InternalJWT: InternalJWTConfig{
@@ -58,6 +60,7 @@ func TestValidate_InternalJWTIncludeOnlyValid(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
 			ServiceName: "svc",
+			Environment: "dev",
 		},
 		Auth: AuthConfig{
 			InternalJWT: InternalJWTConfig{
@@ -78,6 +81,7 @@ func TestValidate_GRPCTLSEnabledWithoutFiles(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
 			ServiceName: "svc",
+			Environment: "dev",
 		},
 		GRPC: GRPCConfig{
 			TLSEnabled: true,
@@ -88,7 +92,7 @@ func TestValidate_GRPCTLSEnabledWithoutFiles(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "GRPC_TLS_CERT_FILE") || !strings.Contains(err.Error(), "GRPC_TLS_KEY_FILE") {
+	if !strings.Contains(err.Error(), "GRPC TLSCertFile") || !strings.Contains(err.Error(), "GRPC TLSKeyFile") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -97,6 +101,7 @@ func TestValidate_HTTPTLSEnabledWithoutFiles(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
 			ServiceName: "svc",
+			Environment: "dev",
 		},
 		HTTP: HTTPConfig{
 			TLSEnabled: true,
@@ -107,7 +112,7 @@ func TestValidate_HTTPTLSEnabledWithoutFiles(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "HTTP_TLS_CERT_FILE") || !strings.Contains(err.Error(), "HTTP_TLS_KEY_FILE") {
+	if !strings.Contains(err.Error(), "HTTP TLSCertFile") || !strings.Contains(err.Error(), "HTTP TLSKeyFile") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -116,6 +121,7 @@ func TestValidate_OTLPInsecureWithCACertConflict(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
 			ServiceName: "svc",
+			Environment: "dev",
 		},
 		Observability: ObservabilityConfig{
 			OTLPInsecure:   true,
@@ -127,7 +133,7 @@ func TestValidate_OTLPInsecureWithCACertConflict(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "OTEL_EXPORTER_OTLP_CA_CERT_FILE must be empty") {
+	if !strings.Contains(err.Error(), "OTLPCACertFile must be empty") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -136,6 +142,7 @@ func TestValidate_MigrationAutoRunRequiresExplicitDBAndDir(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
 			ServiceName: "svc",
+			Environment: "dev",
 		},
 		Migration: MigrationConfig{
 			AutoRun: true,
@@ -155,6 +162,7 @@ func TestValidate_MigrationDBMustExistWithNormalizedAlias(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
 			ServiceName: "svc",
+			Environment: "dev",
 		},
 		Databases: map[string]DBConfig{
 			"transaction_history": {
@@ -249,5 +257,24 @@ func TestValidate_ReturnsValidationErrorsType(t *testing.T) {
 	}
 	if len(validationErr.Issues) == 0 {
 		t.Fatalf("expected validation issues")
+	}
+}
+
+func TestValidate_AppEnvironmentAllowedValues(t *testing.T) {
+	for _, environment := range []string{"local", "dev", "sit", "uat", "prod"} {
+		t.Run(environment, func(t *testing.T) {
+			cfg := &Config{App: AppConfig{ServiceName: "svc", Environment: environment}}
+			if err := cfg.Validate(); err != nil {
+				t.Fatalf("valid APP_ENV %q rejected: %v", environment, err)
+			}
+		})
+	}
+	for _, environment := range []string{"", "test", "production", "PROD"} {
+		t.Run("invalid_"+environment, func(t *testing.T) {
+			cfg := &Config{App: AppConfig{ServiceName: "svc", Environment: environment}}
+			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "APP_ENV") {
+				t.Fatalf("expected APP_ENV validation error, got %v", err)
+			}
+		})
 	}
 }

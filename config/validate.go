@@ -18,13 +18,31 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 	if c.App.ServiceName == "" {
 		issues = append(issues, issue("app", "SERVICE_NAME", "SERVICE_NAME is required"))
 	}
+	if c.App.Environment == "" {
+		issues = append(issues, issue("app", "APP_ENV", "APP_ENV is required"))
+	} else {
+		switch c.App.Environment {
+		case "local", "dev", "sit", "uat", "prod":
+		default:
+			issues = append(issues, issue("app", "APP_ENV", "APP_ENV must be one of local, dev, sit, uat, prod"))
+		}
+	}
+	if c.App.Environment == "" {
+		issues = append(issues, issue("app", "APP_ENV", "APP_ENV is required"))
+	} else {
+		switch c.App.Environment {
+		case "local", "dev", "sit", "uat", "prod":
+		default:
+			issues = append(issues, issue("app", "APP_ENV", "APP_ENV must be one of local, dev, sit, uat, prod"))
+		}
+	}
 
 	for name, db := range c.Databases {
-		if db.Driver == "" {
-			issues = append(issues, issue("database", "DB_"+strings.ToUpper(name)+"_DRIVER", "DB_"+strings.ToUpper(name)+"_DRIVER is required"))
+		if !isSupportedDBDriver(db.Driver) {
+			issues = append(issues, issue("database", "DB_"+strings.ToUpper(name)+"_DRIVER", "DB_"+strings.ToUpper(name)+"_DRIVER must be sqlserver or mysql"))
 		}
 		if db.DSN == "" {
-			issues = append(issues, issue("database", "DB_"+strings.ToUpper(name)+"_DSN", "DB_"+strings.ToUpper(name)+"_DSN or DB_"+strings.ToUpper(name)+"_{HOST,PORT,NAME,USER} is required"))
+			issues = append(issues, issue("database", "DB_"+strings.ToUpper(name), "database host, port, name, and user are required"))
 		}
 		if db.MaxOpenConns <= 0 {
 			issues = append(issues, issue("database", "DB_"+strings.ToUpper(name)+"_MAX_OPEN_CONNS", "DB_"+strings.ToUpper(name)+"_MAX_OPEN_CONNS must be > 0"))
@@ -57,53 +75,60 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 	}
 
 	if c.Kafka.Enabled && len(c.Kafka.Brokers) == 0 {
-		issues = append(issues, issue("kafka", "KAFKA_BROKERS", "KAFKA_BROKERS required when KAFKA_ENABLED=true"))
+		issues = append(issues, issue("kafka", "KAFKA_BROKERS", "KAFKA_BROKERS must not be empty when Kafka is enabled"))
+	}
+	if c.Kafka.Username != "" {
+		switch c.Kafka.SASLMechanism {
+		case "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512":
+		default:
+			issues = append(issues, issue("kafka", "KAFKA_SASL_MECHANISM", "KAFKA_SASL_MECHANISM must be PLAIN, SCRAM-SHA-256, or SCRAM-SHA-512 when KAFKA_USERNAME is set"))
+		}
 	}
 
 	if c.Observability.OTLPInsecure && strings.TrimSpace(c.Observability.OTLPCACertFile) != "" {
-		issues = append(issues, issue("observability", "OTEL_EXPORTER_OTLP_CA_CERT_FILE", "OTEL_EXPORTER_OTLP_CA_CERT_FILE must be empty when OTEL_EXPORTER_OTLP_INSECURE=true"))
+		issues = append(issues, issue("observability", "OTLPCACertFile", "OTLPCACertFile must be empty when OTLPInsecure is true"))
 	}
 
 	if c.Redis.Enabled && c.Redis.Address == "" {
-		issues = append(issues, issue("redis", "REDIS_ADDRESS", "REDIS_ADDRESS required when REDIS_ENABLED=true"))
+		issues = append(issues, issue("redis", "REDIS_ADDRESS", "REDIS_ADDRESS is required when Redis is enabled"))
 	}
 
 	if c.Memcached.Enabled {
 		if len(c.Memcached.Servers) == 0 {
-			issues = append(issues, issue("memcached", "MEMCACHED_SERVERS", "MEMCACHED_SERVERS (or MEMCACHED_ADDRESS) required when MEMCACHED_ENABLED=true"))
+			issues = append(issues, issue("memcached", "MEMCACHED_SERVERS", "MEMCACHED_SERVERS is required when Memcached is enabled"))
 		}
 		if c.Memcached.Timeout <= 0 {
-			issues = append(issues, issue("memcached", "MEMCACHED_TIMEOUT", "MEMCACHED_TIMEOUT must be > 0 when MEMCACHED_ENABLED=true"))
+			issues = append(issues, issue("memcached", "Timeout", "Memcached Timeout must be > 0 when enabled"))
 		}
 	}
 
 	if c.Auth.InternalJWT.Enabled && strings.TrimSpace(c.Auth.InternalJWT.PublicKey) == "" {
-		issues = append(issues, issue("auth", "INTERNAL_JWT_PUBLIC_KEY", "INTERNAL_JWT_PUBLIC_KEY required when INTERNAL_JWT_ENABLED=true"))
+		issues = append(issues, issue("auth", "InternalJWT.PublicKey", "InternalJWT PublicKey is required when enabled"))
 	}
 	if c.Auth.InternalJWT.Enabled && c.Auth.InternalJWT.Leeway < 0 {
-		issues = append(issues, issue("auth", "INTERNAL_JWT_LEEWAY", "INTERNAL_JWT_LEEWAY must be >= 0 when INTERNAL_JWT_ENABLED=true"))
+		issues = append(issues, issue("auth", "InternalJWT.Leeway", "InternalJWT Leeway must be >= 0 when enabled"))
 	}
 	if c.Auth.InternalJWT.Enabled &&
 		len(c.Auth.InternalJWT.IncludeMethods) > 0 &&
 		len(c.Auth.InternalJWT.ExcludeMethods) > 0 {
-		issues = append(issues, issue("auth", "INTERNAL_JWT_INCLUDE_METHODS", "INTERNAL_JWT_INCLUDE_METHODS and INTERNAL_JWT_EXCLUDE_METHODS cannot be used together"))
+		issues = append(issues, issue("auth", "InternalJWT.IncludeMethods", "InternalJWT IncludeMethods and ExcludeMethods cannot be used together"))
 	}
 
 	if c.GRPC.TLSEnabled {
 		if strings.TrimSpace(c.GRPC.TLSCertFile) == "" {
-			issues = append(issues, issue("grpc", "GRPC_TLS_CERT_FILE", "GRPC_TLS_CERT_FILE required when GRPC_TLS_ENABLED=true"))
+			issues = append(issues, issue("grpc", "TLSCertFile", "GRPC TLSCertFile is required when TLS is enabled"))
 		}
 		if strings.TrimSpace(c.GRPC.TLSKeyFile) == "" {
-			issues = append(issues, issue("grpc", "GRPC_TLS_KEY_FILE", "GRPC_TLS_KEY_FILE required when GRPC_TLS_ENABLED=true"))
+			issues = append(issues, issue("grpc", "TLSKeyFile", "GRPC TLSKeyFile is required when TLS is enabled"))
 		}
 	}
 
 	if c.HTTP.TLSEnabled {
 		if strings.TrimSpace(c.HTTP.TLSCertFile) == "" {
-			issues = append(issues, issue("http", "HTTP_TLS_CERT_FILE", "HTTP_TLS_CERT_FILE required when HTTP_TLS_ENABLED=true"))
+			issues = append(issues, issue("http", "TLSCertFile", "HTTP TLSCertFile is required when TLS is enabled"))
 		}
 		if strings.TrimSpace(c.HTTP.TLSKeyFile) == "" {
-			issues = append(issues, issue("http", "HTTP_TLS_KEY_FILE", "HTTP_TLS_KEY_FILE required when HTTP_TLS_ENABLED=true"))
+			issues = append(issues, issue("http", "TLSKeyFile", "HTTP TLSKeyFile is required when TLS is enabled"))
 		}
 	}
 

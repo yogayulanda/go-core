@@ -4,24 +4,22 @@ import "strings"
 
 func normalizeDriver(driver string) string {
 	switch strings.ToLower(strings.TrimSpace(driver)) {
-	case "postgres":
-		return "postgres"
 	case "sqlserver":
 		return "sqlserver"
 	case "mysql":
 		return "mysql"
 	default:
-		return "mysql"
+		return ""
 	}
 }
 
 func keyColumnByDriver(driver string) string {
 	switch normalizeDriver(driver) {
-	case "postgres":
-		return `"key"`
 	case "sqlserver":
 		return "[key]"
-	default:
+	case "mysql":
 		return "`key`"
+	default:
+		return ""
 	}
 }

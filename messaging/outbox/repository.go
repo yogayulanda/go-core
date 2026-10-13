@@ -24,9 +24,7 @@ func WithPublisherDriver(driver string) PublisherOption {
 }
 
 func NewPublisher(opts ...PublisherOption) *Publisher {
-	pub := &Publisher{
-		driver: "mysql",
-	}
+	pub := &Publisher{}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(pub)
@@ -41,6 +39,9 @@ func (p *Publisher) PublishTx(
 	tx *sql.Tx,
 	msg messaging.Message,
 ) error {
+	if p == nil || normalizeDriver(p.driver) == "" {
+		return fmt.Errorf("unsupported outbox database driver %q (supported: sqlserver, mysql)", p.driver)
+	}
 
 	headersJSON, _ := json.Marshal(msg.Headers)
 	query, args := buildInsertPendingQuery(
@@ -72,11 +73,6 @@ func buildInsertPendingQuery(
 	colKey := keyColumnByDriver(driver)
 
 	switch normalizeDriver(driver) {
-	case "postgres":
-		return fmt.Sprintf(
-			`INSERT INTO outbox_events (id, topic, %s, payload, headers, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			colKey,
-		), []interface{}{id, topic, key, payload, headersJSON, status, createdAt}
 	case "sqlserver":
 		return fmt.Sprintf(
 			`INSERT INTO outbox_events (id, topic, %s, payload, headers, status, created_at) VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7)`,
