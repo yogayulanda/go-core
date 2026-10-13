@@ -23,6 +23,7 @@ type App struct {
 	logger    logger.Logger
 	metrics   *observability.Metrics
 	lifecycle *Lifecycle
+	runtime   *runtimeState
 
 	dbs            map[string]*database.DB
 	redisCache     cache.Cache
@@ -55,6 +56,13 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("init logger failed: %w", err)
 	}
 	logIgnoredEnvironmentVariables(ctx, log, cfg.IgnoredEnvVars)
+	if cfg.App.DrainDelay+cfg.App.ShutdownTimeout > 28*time.Second {
+		log.Warn(ctx, "shutdown budget may exceed default pod grace period",
+			logger.Field{Key: "drain_delay", Value: cfg.App.DrainDelay.String()},
+			logger.Field{Key: "shutdown_timeout", Value: cfg.App.ShutdownTimeout.String()},
+		)
+	}
+	log.Info(ctx, "effective_config", effectiveConfigFields(cfg)...)
 
 	// 2. Metrics
 	metrics := observability.NewMetrics()
@@ -126,6 +134,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		logger:         log,
 		metrics:        metrics,
 		lifecycle:      lifecycle,
+		runtime:        newRuntimeState(),
 		dbs:            dbs,
 		redisCache:     redisClient,
 		memcachedCache: memcachedClient,
@@ -283,6 +292,13 @@ func (a *App) Start(ctx context.Context) error {
 		Operation: "app_runtime",
 		Status:    "shutdown_requested",
 	})
+	drainStartedAt := time.Now()
+	a.BeginDrain()
+	if a.cfg.App.DrainDelay > 0 {
+		timer := time.NewTimer(a.cfg.App.DrainDelay)
+		<-timer.C
+	}
+	a.LogShutdownPhase("drain_delay", drainStartedAt, nil)
 
 	shutdownCtx, cancel := context.WithTimeout(
 		context.Background(),

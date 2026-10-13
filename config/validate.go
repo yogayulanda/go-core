@@ -27,6 +27,12 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 			issues = append(issues, issue("app", "APP_ENV", "APP_ENV must be one of local, dev, sit, uat, prod"))
 		}
 	}
+	if c.App.DrainDelay < 0 {
+		issues = append(issues, issue("app", "DrainDelay", "DrainDelay must be >= 0"))
+	}
+	if c.App.ShutdownTimeout <= 0 {
+		issues = append(issues, issue("app", "ShutdownTimeout", "ShutdownTimeout must be > 0"))
+	}
 	if c.Log.SlowQueryThreshold < 0 {
 		issues = append(issues, issue("log", "SlowQueryThreshold", "SlowQueryThreshold must be >= 0"))
 	}

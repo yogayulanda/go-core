@@ -8,6 +8,8 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -22,6 +24,7 @@ type Server struct {
 	server *grpc.Server
 	lis    net.Listener
 	app    *app.App
+	health *health.Server
 }
 
 func (s *Server) Name() string {
@@ -73,6 +76,7 @@ func New(application *app.App) (*Server, error) {
 		grpc.ChainUnaryInterceptor(
 			recoveryInterceptor(log),
 			requestIDInterceptor(),
+			inFlightInterceptor(application),
 			loggingInterceptor(application),
 			authInterceptorWithLogger(authVerifier, log),
 			metricsInterceptor(application),
@@ -93,21 +97,30 @@ func New(application *app.App) (*Server, error) {
 	}
 
 	server := grpc.NewServer(serverOpts...)
+	healthServer := health.NewServer()
+	healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+	grpc_health_v1.RegisterHealthServer(server, healthServer)
+	application.RegisterDrainHook(func() {
+		healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+	})
 
 	s := &Server{
 		server: server,
 		lis:    lis,
 		app:    application,
+		health: healthServer,
 	}
 
-	application.Lifecycle().Register(func(ctx context.Context) error {
+	application.RegisterServerShutdown("grpc_server", func(ctx context.Context) error {
+		startedAt := time.Now()
 		log.LogService(ctx, appLog("grpc_server", "shutdown_requested", 0, "", nil))
-		err := gracefulStopWithTimeout(ctx, server)
+		err := gracefulStopWithTimeoutAndHook(ctx, server, application.LogInflightCut)
 		if err != nil {
 			log.LogService(ctx, appLog("grpc_server", "failed", 0, "graceful_stop_timeout", map[string]interface{}{
 				"error": err.Error(),
 			}))
 		}
+		application.LogShutdownPhase("grpc_server", startedAt, err)
 		return err
 	})
 
@@ -125,7 +138,75 @@ func (s *Server) Start() error {
 	log.LogService(context.Background(), appLog("grpc_server", "started", 0, "", map[string]interface{}{
 		"address": s.lis.Addr().String(),
 	}))
+	monitorCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.monitorHealth(monitorCtx)
 	return s.server.Serve(s.lis)
+}
+
+func (s *Server) monitorHealth(ctx context.Context) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		if s.app.IsDraining() {
+			s.health.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+		} else {
+			checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			ready := grpcDependenciesReady(checkCtx, s.app)
+			cancel()
+			if ready && !s.app.IsDraining() {
+				s.health.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+			} else {
+				s.health.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func grpcDependenciesReady(ctx context.Context, application *app.App) bool {
+	cfg := application.Config()
+	for name, databaseConfig := range cfg.Databases {
+		if !databaseConfig.Required {
+			continue
+		}
+		db := application.SQLByName(name)
+		if db == nil || db.PingContext(ctx) != nil {
+			return false
+		}
+	}
+	if cfg.Redis.Enabled {
+		cache := application.RedisCache()
+		if cache == nil || cache.Health(ctx) != nil {
+			return false
+		}
+	}
+	if cfg.Memcached.Enabled {
+		cache := application.MemcachedCache()
+		if cache == nil || cache.Health(ctx) != nil {
+			return false
+		}
+	}
+	if cfg.Kafka.Enabled {
+		ready := false
+		dialer := &net.Dialer{Timeout: 250 * time.Millisecond}
+		for _, broker := range cfg.Kafka.Brokers {
+			connection, err := dialer.DialContext(ctx, "tcp", broker)
+			if err == nil {
+				_ = connection.Close()
+				ready = true
+				break
+			}
+		}
+		if !ready {
+			return false
+		}
+	}
+	return true
 }
 
 func appLog(operation string, status string, durationMs int64, errorCode string, metadata map[string]interface{}) logger.ServiceLog {
@@ -144,6 +225,10 @@ type grpcStopper interface {
 }
 
 func gracefulStopWithTimeout(ctx context.Context, server grpcStopper) error {
+	return gracefulStopWithTimeoutAndHook(ctx, server, nil)
+}
+
+func gracefulStopWithTimeoutAndHook(ctx context.Context, server grpcStopper, onTimeout func()) error {
 	done := make(chan struct{})
 	go func() {
 		server.GracefulStop()
@@ -154,6 +239,9 @@ func gracefulStopWithTimeout(ctx context.Context, server grpcStopper) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
+		if onTimeout != nil {
+			onTimeout()
+		}
 		server.Stop()
 		<-done
 		return ctx.Err()

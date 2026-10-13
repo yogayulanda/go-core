@@ -33,6 +33,7 @@ type readinessReport struct {
 const (
 	readinessStatusReady    = "ready"
 	readinessStatusNotReady = "not_ready"
+	readinessStatusDraining = "draining"
 	checkStatusUp           = "up"
 	checkStatusDown         = "down"
 	checkStatusSkipped      = "skipped"
@@ -46,6 +47,10 @@ func registerHealthEndpoints(mux *runtime.ServeMux, application *app.App) error 
 	}
 
 	if err := mux.HandlePath("GET", "/ready", func(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+		if application.IsDraining() {
+			writeJSON(w, http.StatusServiceUnavailable, readinessReport{Status: readinessStatusDraining, Checks: map[string]readinessCheck{}})
+			return
+		}
 		ok, report := evaluateReadiness(
 			r.Context(),
 			application.Config(),

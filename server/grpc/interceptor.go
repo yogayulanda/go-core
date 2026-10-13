@@ -49,6 +49,14 @@ func loggingInterceptor(app *app.App) grpc.UnaryServerInterceptor {
 	return loggingInterceptorWithLogger(app.Logger(), app.Config().Log.RequestStart)
 }
 
+func inFlightInterceptor(application *app.App) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, request interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		finish := application.TrackInFlight(ctx, info.FullMethod)
+		defer finish()
+		return handler(ctx, request)
+	}
+}
+
 func loggingInterceptorWithLogger(log logger.Logger, requestStart bool) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,

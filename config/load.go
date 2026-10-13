@@ -34,6 +34,7 @@ func Load(opts ...Option) (*Config, error) {
 			ServiceName:     serviceName,
 			Environment:     strings.TrimSpace(getString("APP_ENV", "")),
 			LogLevel:        getString("LOG_LEVEL", "info"),
+			DrainDelay:      3 * time.Second,
 			ShutdownTimeout: 25 * time.Second,
 		},
 		Databases: dbs,

@@ -21,7 +21,7 @@ const (
 	requestIDReplacedHeader = "X-Core-Request-ID-Replaced"
 )
 
-func withHTTPRequestIdentity(trustedProxyHops int, next http.Handler) http.Handler {
+func withHTTPRequestIdentity(application *app.App, trustedProxyHops int, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := strings.TrimSpace(r.Header.Get(requestIDHeader))
 		replaced := !observability.IsValidRequestID(requestID)
@@ -45,6 +45,8 @@ func withHTTPRequestIdentity(trustedProxyHops int, next http.Handler) http.Handl
 			req.Header.Set(requestIDReplacedHeader, "true")
 		}
 		w.Header().Set(requestIDHeader, requestID)
+		finish := application.TrackInFlight(ctx, r.Method+" "+r.URL.Path)
+		defer finish()
 
 		next.ServeHTTP(w, req)
 	})

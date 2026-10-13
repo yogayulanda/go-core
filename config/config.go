@@ -44,6 +44,7 @@ type AppConfig struct {
 	ServiceName     string
 	Environment     string
 	LogLevel        string
+	DrainDelay      time.Duration
 	ShutdownTimeout time.Duration
 }
 

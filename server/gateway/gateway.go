@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -82,7 +83,7 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 	handler = withSignatureValidation(application, handler)
 	handler = withRequestBodyLimit(application, cfg.HTTP.MaxBodyBytes, handler)
 	handler = withPanicRecovery(application, handler)
-	handler = withHTTPRequestIdentity(cfg.HTTP.TrustedProxyHops, handler)
+	handler = withHTTPRequestIdentity(application, cfg.HTTP.TrustedProxyHops, handler)
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTP.Port),
@@ -93,12 +94,19 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 		IdleTimeout:       cfg.HTTP.IdleTimeout,
 	}
 
-	application.Lifecycle().Register(func(ctx context.Context) error {
+	application.RegisterServerShutdown("http_gateway", func(ctx context.Context) error {
+		startedAt := time.Now()
 		log.LogService(ctx, logger.ServiceLog{
 			Operation: "http_gateway",
 			Status:    "shutdown_requested",
 		})
-		return httpServer.Shutdown(ctx)
+		err := httpServer.Shutdown(ctx)
+		if err != nil {
+			application.LogInflightCut()
+			_ = httpServer.Close()
+		}
+		application.LogShutdownPhase("http_gateway", startedAt, err)
+		return err
 	})
 
 	return &Gateway{
