@@ -38,9 +38,11 @@ Pool sizing and required/optional status are code fields. PostgreSQL and old poo
 ## Observability And Diagnostics
 
 - `APM_ENDPOINT` enables the existing OTLP gRPC tracing exporter.
+- `METRICS_ENABLED` enables metric recording and `/metrics` (default false).
 - `DIAG_ENABLED` controls diagnostic snapshots (default true).
 
-Diagnostics thresholds, cooldown (10m), and check interval (30s) are code fields. Metrics enablement policy (`GC-24`) and tracing-backend policy (`GC-23`) remain blocked decisions; there is no `METRICS_ENABLED` variable yet.
+Tracing goes to Elastic APM Server via OpenTelemetry OTLP. No Elastic APM agent is used and logs do not contain `transaction.id`.
+Diagnostics thresholds, cooldown (10m), and check interval (30s) are code fields.
 
 ## Code-Only Runtime Fields
 

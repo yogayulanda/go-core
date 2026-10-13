@@ -31,6 +31,7 @@ type Config struct {
 	GRPC           GRPCConfig
 	HTTP           HTTPConfig
 	Observability  ObservabilityConfig
+	Metrics        MetricsConfig
 	Log            LogConfig
 	Diagnostics    DiagnosticsConfig
 	Auth           AuthConfig
@@ -101,6 +102,10 @@ type ObservabilityConfig struct {
 	OTLPInsecure       bool
 	OTLPCACertFile     string
 	TraceSamplingRatio float64
+}
+
+type MetricsConfig struct {
+	Enabled bool
 }
 
 type DiagnosticsConfig struct {

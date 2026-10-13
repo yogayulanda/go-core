@@ -39,9 +39,11 @@ This section records the internal foundation refresh completed in this workspace
 The Go module path is unchanged in this prepared state. A consuming internal release still requires `D-PATH` approval and a separate human-controlled release/tag action.
 
 ### Known Gaps Before Release
-- `GC-23` tracing backend policy and `GC-24` metrics enablement policy remain blocked by decisions.
+- `GC-23` is resolved as OpenTelemetry OTLP to Elastic APM Server; no APM agent or `transaction.id` field is used.
+- `GC-24` is resolved as `METRICS_ENABLED=false` by default; metrics and `/metrics` are opt-in, and `app_transaction_total` is removed.
 - `D-PATH` (internal module path) remains open; no tag was created.
 - `Q-SIG` confirmation of the existing signature scheme remains deferred.
+- The source directive remains Go 1.24.3; the office build image is Go 1.24.13. Go 1.26.x is the next planned toolchain upgrade.
 - SQL Server/MySQL outbox integration tests were authored with the `integration` build tag but not run here because Docker was unavailable (S8).
 
 ## [1.0.1] - 2026-05-25

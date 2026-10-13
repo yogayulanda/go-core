@@ -12,6 +12,7 @@ import (
 
 // Metrics holds core Prometheus metrics used by go-core.
 type Metrics struct {
+	Enabled                bool
 	RequestTotal           *prometheus.CounterVec
 	RequestDuration        *prometheus.HistogramVec
 	HTTPRequestTotal       *prometheus.CounterVec
@@ -26,7 +27,6 @@ type Metrics struct {
 	OutboxBatchTotal       *prometheus.CounterVec
 	OutboxBatchDuration    *prometheus.HistogramVec
 	OutboxBatchSize        *prometheus.HistogramVec
-	TransactionTotal       *prometheus.CounterVec
 }
 
 var (
@@ -35,7 +35,7 @@ var (
 )
 
 // NewMetrics initializes and registers core metrics.
-func NewMetrics() *Metrics {
+func NewMetrics(enabled ...bool) *Metrics {
 	metricsOnce.Do(func() {
 		metricsInst = &Metrics{
 			RequestTotal: registerOrReuseCounterVec(
@@ -143,21 +143,20 @@ func NewMetrics() *Metrics {
 				},
 				[]string{"service"},
 			),
-			TransactionTotal: registerOrReuseCounterVec(
-				prometheus.CounterOpts{
-					Name: "app_transaction_total",
-					Help: "Total number of business transactions.",
-				},
-				[]string{"service", "operation", "status"},
-			),
 		}
 	})
-
-	return metricsInst
+	active := len(enabled) > 0 && enabled[0]
+	view := *metricsInst
+	view.Enabled = active
+	return &view
 }
 
 // Handler returns HTTP handler for Prometheus scraping.
-func Handler() http.Handler {
+func Handler(enabled ...bool) http.Handler {
+	active := len(enabled) > 0 && enabled[0]
+	if !active {
+		return http.NotFoundHandler()
+	}
 	return promhttp.Handler()
 }
 

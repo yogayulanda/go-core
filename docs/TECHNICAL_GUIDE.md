@@ -52,7 +52,7 @@ Retries off by default; opt in per client with `httpclient.WithRetry(resilience.
 
 ### gRPC
 
-`grpcclient.NewClient(target, log, options...)` provides `Conn()`, `Close()`, `Dial(...)`, identity metadata propagation, OTel stats, call logs/metrics, keepalive, and a 30-second default deadline when the caller supplied none. Retries are disabled, including service-config retries. The default transport is plaintext to match the default server; supply `WithTransportCredentials(...)` for TLS. `ResponseCodeFromHeader` and `ErrorInfo` read go-core response metadata.
+`grpcclient.NewClient(target, log, options...)` provides `Conn()`, `Close()`, `Dial(...)`, identity metadata propagation, OTel stats, call logs, keepalive, and a 30-second default deadline when the caller supplied none. Per-call metrics require `grpcclient.WithMetricsEnabled(true)`. Retries are disabled, including service-config retries. The default transport is plaintext to match the default server; supply `WithTransportCredentials(...)` for TLS. `ResponseCodeFromHeader` and `ErrorInfo` read go-core response metadata.
 
 ## Kafka, Outbox, And Audit Events
 
@@ -68,4 +68,6 @@ Consumer concurrency is keyed by partition: a partition has one FIFO worker, and
 
 `DIAG_ENABLED=true` enables bounded runtime diagnostics (goroutine threshold 5000, heap threshold 80% of cgroup memory, 10m cooldown, 30s check interval). Snapshots contain function/file locations and numeric stats only.
 
-Still undecided/out of scope: `GC-23` tracing backend, `GC-24` metrics policy, `D-PATH` internal module path, and `Q-SIG` signature scheme confirmation. No module path change or tag is included here.
+Tracing is OpenTelemetry OTLP to Elastic APM Server via `APM_ENDPOINT`; no Elastic APM agent is used and logs do not include `transaction.id`. Metrics are disabled by default; set `METRICS_ENABLED=true` to record metrics and register `/metrics`. `app_transaction_total` is removed.
+
+Still out of scope: `D-PATH` internal module path and human-controlled tag/release. `Q-SIG` confirmation is deferred but is not a release blocker. Keep `go 1.24.3` in `go.mod`; the office image uses Go 1.24.13 and the next upgrade target is Go 1.26.x.

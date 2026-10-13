@@ -188,7 +188,7 @@ func TestWorkerRunOnce_EmptyBatch_EmitsMetric(t *testing.T) {
 	)
 	mock.ExpectRollback()
 
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	w := NewWorkerWithOptions(
 		db,
 		stubPublisher{},
@@ -224,7 +224,7 @@ func TestWorkerRunOnce_SuccessBatch_EmitsMetric(t *testing.T) {
 	mock.ExpectCommit()
 	mock.ExpectExec("UPDATE outbox_events SET status = 'SENT'").WillReturnResult(sqlmock.NewResult(0, 1))
 
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	w := NewWorkerWithOptions(
 		db,
 		stubPublisher{},
@@ -319,7 +319,7 @@ func TestWorkerRunOnce_PublishFailure_ReturnsError(t *testing.T) {
 	mock.ExpectCommit()
 	mock.ExpectExec("UPDATE outbox_events SET status = ?").WithArgs("PENDING", 1, "publish failed", sqlmock.AnyArg(), int64(1)).WillReturnResult(sqlmock.NewResult(0, 1))
 
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	w := NewWorkerWithOptions(
 		db,
 		failingPublisher{},
@@ -354,7 +354,7 @@ func TestWorkerRunOnce_CommitFailure_ReturnsError(t *testing.T) {
 	mock.ExpectExec("UPDATE outbox_events SET status = 'PROCESSING'").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
 
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	w := NewWorkerWithOptions(
 		db,
 		stubPublisher{},

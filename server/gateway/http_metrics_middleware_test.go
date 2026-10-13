@@ -18,6 +18,7 @@ func TestHTTPMetricsUseMatchedTemplateAndBoundUnmatchedRoutes(t *testing.T) {
 	const serviceName = "route-template-metrics-test"
 	application, err := app.New(context.Background(), &config.Config{
 		App:       config.AppConfig{ServiceName: serviceName, Environment: "dev", LogLevel: "error", ShutdownTimeout: time.Second},
+		Metrics:   config.MetricsConfig{Enabled: true},
 		Databases: map[string]config.DBConfig{},
 	})
 	if err != nil {
@@ -44,5 +45,36 @@ func TestHTTPMetricsUseMatchedTemplateAndBoundUnmatchedRoutes(t *testing.T) {
 	}
 	if got := testutil.ToFloat64(metrics.HTTPRequestTotal.WithLabelValues(serviceName, http.MethodGet, "unmatched", "404")); got != 1000 {
 		t.Fatalf("expected unmatched paths to share one bounded label, got count %v", got)
+	}
+}
+
+func TestHTTPMetricsDisabledDoesNotRecord(t *testing.T) {
+	const serviceName = "route-template-metrics-disabled-test"
+	application, err := app.New(context.Background(), &config.Config{
+		App:       config.AppConfig{ServiceName: serviceName, Environment: "dev", LogLevel: "error", ShutdownTimeout: time.Second},
+		Databases: map[string]config.DBConfig{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if application.Metrics().Enabled {
+		t.Fatal("metrics should be disabled by default")
+	}
+	metrics := application.Metrics()
+	counter := metrics.HTTPRequestTotal.WithLabelValues(serviceName, http.MethodGet, "unmatched", "404")
+	before := testutil.ToFloat64(counter)
+	handler := withHTTPMetrics(application, http.NotFoundHandler())
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/unmatched", nil))
+	if after := testutil.ToFloat64(counter); after != before {
+		t.Fatalf("disabled metrics recorded a request: before=%v after=%v", before, after)
+	}
+	mux := runtime.NewServeMux()
+	if err := registerMetricsEndpoint(mux, metrics); err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("disabled metrics endpoint returned %d, want 404", recorder.Code)
 	}
 }

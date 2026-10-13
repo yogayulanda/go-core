@@ -1,6 +1,6 @@
 # grpcclient
 
-`grpcclient` wraps a `grpc.ClientConn` with request identity propagation, OpenTelemetry client stats, a default per-call deadline, keepalive parameters, service logging, and metrics. Service-config retries are disabled.
+`grpcclient` wraps a `grpc.ClientConn` with request identity propagation, OpenTelemetry client stats, a default per-call deadline, keepalive parameters, and service logging. Metrics are disabled unless `grpcclient.WithMetricsEnabled(true)` is supplied. Service-config retries are disabled.
 
 ```go
 client, err := grpcclient.NewClient("payments.internal:50051", log)

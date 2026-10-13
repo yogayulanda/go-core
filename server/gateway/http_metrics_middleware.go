@@ -31,6 +31,10 @@ func withHTTPMetrics(application *app.App, next http.Handler) http.Handler {
 	metrics := application.Metrics()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !metrics.Enabled {
+			next.ServeHTTP(w, r)
+			return
+		}
 		// Skip self-observation to avoid noisy scrape feedback loops.
 		if r.URL.Path == "/metrics" {
 			next.ServeHTTP(w, r)

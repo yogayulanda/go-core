@@ -46,7 +46,9 @@ For stable `v1` adoption, this is the default bootstrap flow unless a service ha
 Only services that belong to the transaction-oriented class should use:
 
 - `logger.TransactionLog`
-- `app_transaction_total`
+- context-backed `labels.gtid` and transaction log fields
+
+There is no transaction counter. Prometheus recording and `/metrics` are disabled by default and require `METRICS_ENABLED=true`.
 
 Other services should stay on the generic logging and request metrics baseline unless a separate platform-standard contract is defined.
 

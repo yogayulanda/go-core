@@ -18,6 +18,4 @@ Identity is resolved from the context field bag, including `labels.gtid` and `us
 
 Logs are emitted with `app.log_type=transaction` and `app.transaction.*` fields. Do not place sensitive values in amount-adjacent metadata or other log fields.
 
-## Metrics Status
-
-`app_transaction_total{service,operation,status}` is currently registered but has no increment path. Whether to remove it or wire it to `LogTransaction` is unresolved in `GC-24`; consumers should not treat it as a live counter until that decision is made.
+There is no `app_transaction_total` metric. Prometheus recording and the `/metrics` endpoint require `METRICS_ENABLED=true`.

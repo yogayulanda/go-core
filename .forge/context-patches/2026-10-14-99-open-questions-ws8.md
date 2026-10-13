@@ -3,12 +3,15 @@
 Status: proposal only; curated context remains unchanged.
 
 ## Keep open
-- `GC-23`: choose OTLP-to-Elastic APM versus Elastic APM Go agent.
-- `GC-24`: decide metrics enablement default and transaction counter handling.
 - `D-PATH`: approve the internal module path; WS-9 is excluded and no tag was created.
-- `Q-SIG`: compare the existing webview/service signature scheme before changing or certifying the contract.
+- `Q-SIG`: compare the existing webview/service signature scheme before changing or certifying the contract; it is not a release blocker.
 - Operations: confirm the office Kafka SASL preference and deployment termination grace period.
 - S8: run SQL Server/MySQL outbox integration tests when Docker/test databases are available.
+
+## Resolved
+- `GC-23`: OpenTelemetry OTLP to Elastic APM Server via `APM_ENDPOINT`; no Elastic agent and no `transaction.id`.
+- `GC-24`: `METRICS_ENABLED=false` by default; recording and `/metrics` are conditional; remove `app_transaction_total`.
+- Keep `go 1.24.3`; office image Go 1.24.13; next target Go 1.26.x.
 
 ## Close stale questions only with evidence
 - The implementation supports PLAIN and both SCRAM variants regardless of the still-unknown office preference.

@@ -146,6 +146,9 @@ func metricsInterceptor(app *app.App) grpc.UnaryServerInterceptor {
 			statusStr = "failed"
 		}
 
+		if !app.Metrics().Enabled {
+			return resp, err
+		}
 		serviceName := app.Config().App.ServiceName
 
 		app.Metrics().RequestTotal.WithLabelValues(

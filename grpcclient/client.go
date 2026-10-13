@@ -43,7 +43,7 @@ func NewClient(target string, log logger.Logger, options ...Option) (*Client, er
 	if cfg.TransportCredentials == nil {
 		return nil, fmt.Errorf("grpc client transport credentials are nil")
 	}
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(cfg.MetricsEnabled)
 	dialOptions := append([]grpc.DialOption{
 		grpc.WithTransportCredentials(cfg.TransportCredentials),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
@@ -113,8 +113,10 @@ func clientInterceptor(log logger.Logger, options Options, metrics *observabilit
 			ErrorCode:  grpcCode,
 			Metadata:   map[string]interface{}{"method": method, "grpc_code": grpcCode},
 		})
-		metrics.ServiceTotal.WithLabelValues(options.ServiceName, method, grpcCode).Inc()
-		metrics.ServiceDuration.WithLabelValues(options.ServiceName, method).Observe(duration.Seconds())
+		if metrics.Enabled {
+			metrics.ServiceTotal.WithLabelValues(options.ServiceName, method, grpcCode).Inc()
+			metrics.ServiceDuration.WithLabelValues(options.ServiceName, method).Observe(duration.Seconds())
+		}
 		return err
 	}
 }

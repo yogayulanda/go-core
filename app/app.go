@@ -66,7 +66,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	log.Info(ctx, "effective_config", effectiveConfigFields(cfg)...)
 
 	// 2. Metrics
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(cfg.Metrics.Enabled)
 
 	// 3. Lifecycle
 	lifecycle := NewLifecycle(cfg.App.ShutdownTimeout, log)

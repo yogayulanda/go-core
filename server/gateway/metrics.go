@@ -8,8 +8,12 @@ import (
 	"github.com/yogayulanda/go-core/observability"
 )
 
-func registerMetricsEndpoint(mux *runtime.ServeMux) error {
+func registerMetricsEndpoint(mux *runtime.ServeMux, metrics *observability.Metrics) error {
 	return mux.HandlePath("GET", "/metrics", func(w http.ResponseWriter, r *http.Request, _ map[string]string) {
-		observability.Handler().ServeHTTP(w, r)
+		if metrics == nil || !metrics.Enabled {
+			http.NotFound(w, r)
+			return
+		}
+		observability.Handler(metrics.Enabled).ServeHTTP(w, r)
 	})
 }

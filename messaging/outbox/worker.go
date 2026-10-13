@@ -336,7 +336,7 @@ func (w *Worker) observeBatch(ctx context.Context, status string, errorCode stri
 			Metadata:   metadata,
 		})
 	}
-	if w.metrics != nil && w.serviceName != "" {
+	if w.metrics != nil && w.metrics.Enabled && w.serviceName != "" {
 		w.metrics.OutboxBatchTotal.WithLabelValues(w.serviceName, status).Inc()
 		w.metrics.OutboxBatchDuration.WithLabelValues(w.serviceName).Observe(duration.Seconds())
 		w.metrics.OutboxBatchSize.WithLabelValues(w.serviceName).Observe(float64(batchSize))

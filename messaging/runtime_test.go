@@ -103,7 +103,7 @@ func TestKafkaPublisher_ObservabilitySuccess(t *testing.T) {
 	}
 
 	log := &testLogger{}
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	pub, err := NewKafkaPublisher(
 		config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}},
 		WithPublisherLogger(log),
@@ -128,6 +128,19 @@ func TestKafkaPublisher_ObservabilitySuccess(t *testing.T) {
 	}
 	if !log.contains("message_publish", "success") {
 		t.Fatalf("expected message_publish success service log")
+	}
+}
+
+func TestMessagingMetricRecordingDisabledByDefault(t *testing.T) {
+	disabled := observability.NewMetrics(false)
+	observeMessagePublish(publisherConfig{metrics: disabled, serviceName: "metrics-disabled-test"}, "topic", "success")
+	if got := testutil.ToFloat64(disabled.MessagePublishTotal.WithLabelValues("metrics-disabled-test", "topic", "success")); got != 0 {
+		t.Fatalf("disabled metrics recorded a publish: %v", got)
+	}
+	enabled := observability.NewMetrics(true)
+	observeMessagePublish(publisherConfig{metrics: enabled, serviceName: "metrics-enabled-test"}, "topic", "success")
+	if got := testutil.ToFloat64(enabled.MessagePublishTotal.WithLabelValues("metrics-enabled-test", "topic", "success")); got != 1 {
+		t.Fatalf("enabled metrics did not record a publish: %v", got)
 	}
 }
 
@@ -164,7 +177,7 @@ func TestKafkaPublisher_ObservabilityFailureAndDLQ(t *testing.T) {
 			}
 
 			log := &testLogger{}
-			metrics := observability.NewMetrics()
+			metrics := observability.NewMetrics(true)
 			serviceName := "publisher-failure-test-" + strings.ReplaceAll(tt.name, " ", "-")
 			pub, err := NewKafkaPublisher(
 				config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}},
@@ -224,7 +237,7 @@ func TestKafkaConsumer_ObservabilitySuccess(t *testing.T) {
 	}
 
 	log := &testLogger{}
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	consumer, err := NewKafkaConsumer(
 		config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}},
 		"record.created",
@@ -338,7 +351,7 @@ func TestKafkaConsumer_ObservabilityCommitFailed(t *testing.T) {
 	}
 
 	log := &testLogger{}
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	consumer, err := NewKafkaConsumer(
 		config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}},
 		"record.failed",
@@ -389,7 +402,7 @@ func TestKafkaConsumer_ObservabilityDLQSuccessAndFetchFailed(t *testing.T) {
 	}
 
 	log := &testLogger{}
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	consumer, err := NewKafkaConsumer(
 		config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}},
 		"record.dlq",

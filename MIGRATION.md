@@ -49,6 +49,8 @@ The following changes are consumer-visible breaking changes. Plan them together 
 - The gateway uses matched route-template metric labels; unmatched requests use `unmatched`.
 - `DIAG_ENABLED` defaults to true. The watcher emits bounded diagnostic snapshots on configured goroutine/cgroup-heap thresholds, with a shared cooldown. Disable with `DIAG_ENABLED=false` when required by local policy.
 - Shutdown defaults are `DrainDelay=3s` and `ShutdownTimeout=25s`; readiness returns 503 and gRPC health becomes `NOT_SERVING` during drain.
+- Prometheus metric recording and `/metrics` are disabled by default. Set `METRICS_ENABLED=true` to enable them. The `app_transaction_total` metric was removed.
+- Tracing remains OpenTelemetry OTLP to Elastic APM Server through `APM_ENDPOINT`; there is no Elastic APM agent and no `transaction.id` log field.
 
 ### Constructor and test-helper changes
 
@@ -58,8 +60,7 @@ The following changes are consumer-visible breaking changes. Plan them together 
 
 ## Still Blocked / Deferred
 
-- `GC-23`: Elastic tracing backend/agent policy.
-- `GC-24`: metrics enablement policy.
 - `D-PATH`: internal module path; no tag was created.
-- `Q-SIG`: confirmation of the existing HTTP signature scheme.
+- `Q-SIG`: compatibility confirmation is deferred but is not a release blocker.
+- Go source directive remains `1.24.3`; office build image is `1.24.13`; next upgrade target is `1.26.x`.
 - SQL Server/MySQL outbox integration tests require Docker and were not run in the implementation environment (S8).

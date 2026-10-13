@@ -64,7 +64,7 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 	if err := registerVersionEndpoint(mux); err != nil {
 		return nil, fmt.Errorf("failed to register version endpoint: %w", err)
 	}
-	if err := registerMetricsEndpoint(mux); err != nil {
+	if err := registerMetricsEndpoint(mux, application.Metrics()); err != nil {
 		return nil, fmt.Errorf("failed to register metrics endpoint: %w", err)
 	}
 	if cfg.HTTP.PprofEnabled {

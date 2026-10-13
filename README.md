@@ -115,6 +115,7 @@ Core variables:
 - `HTTP_CORS_ALLOWED_ORIGINS`
 - `HTTP_PPROF_ENABLED`
 - `DIAG_ENABLED`
+- `METRICS_ENABLED` (default false; enables metric recording and `/metrics`)
 
 Database variables:
 
@@ -219,6 +220,7 @@ The repository provides additive observability primitives rather than a mandator
 - sensitive key redaction for common secret fields
 - Prometheus metrics for HTTP, gRPC, service operations, DB operations, messaging, outbox, and transaction-oriented flows
 - OpenTelemetry tracing bootstrap and transport wrappers
+- OpenTelemetry OTLP export to Elastic APM Server via `APM_ENDPOINT`; no Elastic APM agent or `transaction.id` log field
 - health, readiness, metrics, version, and optional pprof endpoints
 - bounded gateway `route` labels from matched templates; unmatched paths share `unmatched`
 - optional diagnostic snapshots when goroutine or cgroup heap thresholds are crossed; `DIAG_ENABLED=false` disables the watcher
@@ -318,7 +320,7 @@ BASE_URL=https://staging.example.com TARGET_PATH=/health make load-steady
 
 Use `docs/PRODUCTION_SIGNOFF.md` and `docs/RELEASE_EVIDENCE_TEMPLATE.md` when preparing a production service release that consumes this module.
 
-Open release decisions remain: Elastic tracing integration (`GC-23`), metrics enablement policy (`GC-24`), internal module path (`D-PATH`), and confirmation of the existing HTTP signature scheme (`Q-SIG`). This workspace has not changed module path or created release tags.
+Open release work remains: internal module path (`D-PATH`) and human-controlled release/tagging. `Q-SIG` confirmation is deferred but is not a release blocker. GC-23 uses OpenTelemetry OTLP to Elastic APM Server; GC-24 metrics are opt-in via `METRICS_ENABLED` (default false). The source directive stays Go 1.24.3; the office image uses 1.24.13 and the next upgrade target is 1.26.x.
 
 Set build metadata with `-ldflags` when building a service that exposes `/version`:
 

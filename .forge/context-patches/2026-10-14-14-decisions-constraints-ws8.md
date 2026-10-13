@@ -11,7 +11,10 @@ Status: proposal only; curated context remains unchanged.
 - No `.forge/context` file is directly edited; these are proposals only.
 
 ## Preserve open constraints
-- `GC-23`, `GC-24`, `D-PATH`, and `Q-SIG` remain unresolved; no module path change or tag is made.
+- `GC-23` is decided as OTLP to Elastic APM Server without an Elastic APM agent or `transaction.id`.
+- `GC-24` is decided: `METRICS_ENABLED` defaults false, metrics and `/metrics` are conditional, and `app_transaction_total` is removed.
+- `D-PATH` remains unresolved; no module path change or tag is made. `Q-SIG` is deferred but is not a release blocker.
+- Keep Go directive 1.24.3, use office image Go 1.24.13, and target Go 1.26.x next.
 - Office Kafka SASL preference and production termination grace-period configuration remain operational confirmations.
 
 Evidence: WS-5/6/7a implementation commits, `NOTICE.txt`, SDD revision 8.

@@ -63,6 +63,9 @@ func TestLoad_MigrationDefaultsAreExplicit(t *testing.T) {
 	if cfg.Diagnostics.HeapThresholdPercent != 80 || cfg.Diagnostics.GoroutineThreshold != 5000 || cfg.Diagnostics.Cooldown != 10*time.Minute || cfg.Diagnostics.CheckInterval != 30*time.Second {
 		t.Fatalf("unexpected diagnostics defaults: %+v", cfg.Diagnostics)
 	}
+	if cfg.Metrics.Enabled {
+		t.Fatal("METRICS_ENABLED must default to false")
+	}
 }
 
 func TestLoad_ActiveEnvironmentVariablesMapToConfig(t *testing.T) {
@@ -99,6 +102,8 @@ func TestLoad_ActiveEnvironmentVariablesMapToConfig(t *testing.T) {
 		{"KAFKA_JKS_PASSWORD", "jks-test-secret", func(c *Config) bool { return c.Kafka.JksPassword == "jks-test-secret" }},
 		{"APM_ENDPOINT", "apm.example:4317", func(c *Config) bool { return c.Observability.OTLPEndpoint == "apm.example:4317" }},
 		{"DIAG_ENABLED", "false", func(c *Config) bool { return !c.Diagnostics.Enabled }},
+		{"METRICS_ENABLED", "true", func(c *Config) bool { return c.Metrics.Enabled }},
+		{"METRICS_ENABLED", "false", func(c *Config) bool { return !c.Metrics.Enabled }},
 		{"HTTP_PPROF_ENABLED", "true", func(c *Config) bool { return c.HTTP.PprofEnabled }},
 	}
 

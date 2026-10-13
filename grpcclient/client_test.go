@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	errdetails "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -96,6 +97,8 @@ func TestClient_PropagatesIdentityUsesDeadlineAndDoesNotRetry(t *testing.T) {
 	}
 	log := &testLogger{}
 	client, err := NewClient(listener.Addr().String(), log,
+		WithServiceName("grpcclient-metrics-opt-in-test"),
+		WithMetricsEnabled(true),
 		WithDialOptions(grpc.WithDefaultServiceConfig(`{"methodConfig":[{"name":[{"service":"test.Service"}],"retryPolicy":{"maxAttempts":4,"initialBackoff":"0.01s","maxBackoff":"0.01s","backoffMultiplier":1,"retryableStatusCodes":["UNAVAILABLE"]}}]}`)),
 	)
 	if err != nil {
@@ -119,6 +122,15 @@ func TestClient_PropagatesIdentityUsesDeadlineAndDoesNotRetry(t *testing.T) {
 	}
 	if len(log.services) != 1 || log.services[0].Operation != "grpc_client_call" {
 		t.Fatalf("expected exactly one call log, got %#v", log.services)
+	}
+	if got := testutil.ToFloat64(observability.NewMetrics(true).ServiceTotal.WithLabelValues("grpcclient-metrics-opt-in-test", "/test.Service/Call", codes.Unavailable.String())); got != 1 {
+		t.Fatalf("explicitly enabled gRPC client metric count = %v, want 1", got)
+	}
+}
+
+func TestClientMetricsDisabledByDefault(t *testing.T) {
+	if defaultOptions().MetricsEnabled {
+		t.Fatal("gRPC client metrics must default to disabled")
 	}
 }
 

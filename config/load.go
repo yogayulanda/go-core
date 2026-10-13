@@ -73,6 +73,7 @@ func Load(opts ...Option) (*Config, error) {
 			OTLPCACertFile:     "",
 			TraceSamplingRatio: 0.1,
 		},
+		Metrics: MetricsConfig{Enabled: getBool("METRICS_ENABLED", false)},
 		Log: LogConfig{
 			MaskKeys:             []string{"password", "passwd", "secret", "token", "authorization", "apikey", "api_key", "pin", "otp", "cvv", "card", "private_key", "session", "phone", "msisdn", "account", "cif", "nik"},
 			RequestStart:         false,
