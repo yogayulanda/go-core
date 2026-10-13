@@ -2,12 +2,20 @@ package httpclient
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/sony/gobreaker/v2"
 	"github.com/yogayulanda/go-core/logger"
+	"github.com/yogayulanda/go-core/observability"
+	"github.com/yogayulanda/go-core/resilience"
 )
 
 func TestClient_Get(t *testing.T) {
@@ -48,7 +56,7 @@ func TestClient_Retry(t *testing.T) {
 	defer server.Close()
 
 	log, _ := logger.New("http-test", "debug")
-	client := NewClient(log)
+	client := NewClient(log, WithRetry(resilience.DefaultRetryOptions()))
 
 	resp, err := client.Get(context.Background(), server.URL)
 	if err != nil {
@@ -61,5 +69,202 @@ func TestClient_Retry(t *testing.T) {
 
 	if resp.StatusCode() != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.StatusCode())
+	}
+}
+
+func TestClient_DefaultDoesNotRetryPOSTAndReturnsReceived503(t *testing.T) {
+	var attempts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	log, _ := logger.New("http-test", "error")
+	client := NewClient(log)
+	resp, err := client.Post(context.Background(), server.URL, map[string]string{"value": "once"})
+	if err != nil {
+		t.Fatalf("received HTTP status should not be returned as a transport error: %v", err)
+	}
+	if resp == nil || resp.StatusCode() != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 response, got %#v", resp)
+	}
+	if attempts != 1 {
+		t.Fatalf("expected one POST attempt by default, got %d", attempts)
+	}
+}
+
+func TestClient_CircuitBreakerDoesNotHideReceivedResponse(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	log, _ := logger.New("http-test", "error")
+	cb := resilience.DefaultCircuitBreakerOptions("http-test")
+	cb.ReadyToTrip = func(counts gobreaker.Counts) bool { return counts.TotalFailures >= 1 }
+	client := NewClient(log, WithCircuitBreaker(cb))
+	resp, err := client.Get(context.Background(), server.URL)
+	if err != nil || resp == nil || resp.StatusCode() != http.StatusServiceUnavailable {
+		t.Fatalf("expected received 503 response, resp=%v err=%v", resp, err)
+	}
+	resp, err = client.Get(context.Background(), server.URL)
+	var transportErr *TransportError
+	if resp != nil || !errors.As(err, &transportErr) || transportErr.Phase != PhaseBeforeSend || transportErr.Kind != TransportKindCircuitOpen {
+		t.Fatalf("expected before-send circuit-open failure, resp=%v err=%v", resp, err)
+	}
+	if attempts != 1 {
+		t.Fatalf("circuit-open request reached the server: %d attempts", attempts)
+	}
+}
+
+func TestClient_ConnectionRefusedIsBeforeSend(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	log, _ := logger.New("http-test", "error")
+	client := NewClient(log, WithoutTracing())
+	_, err = client.Get(context.Background(), "http://"+address)
+	var transportErr *TransportError
+	if !errors.As(err, &transportErr) || transportErr.Phase != PhaseBeforeSend || transportErr.Kind != TransportKindConnection {
+		t.Fatalf("expected before-send connection error, got %#v", err)
+	}
+}
+
+func TestClient_TimeoutAfterHeadersIsAfterSend(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-release
+	}))
+	defer func() {
+		close(release)
+		server.Close()
+	}()
+	log, _ := logger.New("http-test", "error")
+	client := NewClient(log, WithTimeout(200*time.Millisecond), WithoutTracing())
+	_, err := client.Get(context.Background(), server.URL)
+	var transportErr *TransportError
+	if !errors.As(err, &transportErr) || transportErr.Phase != PhaseAfterSend || transportErr.Kind != TransportKindTimeout {
+		t.Fatalf("expected after-send timeout, got %#v", err)
+	}
+}
+
+func TestClient_ConnectionClosedAfterHeadersIsAfterSend(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			http.Error(w, "hijacking unsupported", http.StatusInternalServerError)
+			return
+		}
+		connection, _, err := hijacker.Hijack()
+		if err != nil {
+			return
+		}
+		if _, err := fmt.Fprint(connection, "HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\n"); err != nil {
+			_ = connection.Close()
+			return
+		}
+		_ = connection.Close()
+	}))
+	defer server.Close()
+	log, _ := logger.New("http-test", "error")
+	client := NewClient(log, WithoutTracing())
+	_, err := client.Get(context.Background(), server.URL)
+	var transportErr *TransportError
+	if !errors.As(err, &transportErr) || transportErr.Phase != PhaseAfterSend {
+		t.Fatalf("expected after-send error, got %#v", err)
+	}
+}
+
+type capturedLogger struct {
+	mu       sync.Mutex
+	services []logger.ServiceLog
+}
+
+func (*capturedLogger) Info(context.Context, string, ...logger.Field)  {}
+func (*capturedLogger) Error(context.Context, string, ...logger.Field) {}
+func (*capturedLogger) Debug(context.Context, string, ...logger.Field) {}
+func (*capturedLogger) Warn(context.Context, string, ...logger.Field)  {}
+func (l *capturedLogger) LogService(_ context.Context, service logger.ServiceLog) {
+	l.mu.Lock()
+	l.services = append(l.services, service)
+	l.mu.Unlock()
+}
+func (*capturedLogger) LogDB(context.Context, logger.DBLog)                   {}
+func (*capturedLogger) LogEvent(context.Context, logger.EventLog)             {}
+func (*capturedLogger) LogTransaction(context.Context, logger.TransactionLog) {}
+func (l *capturedLogger) WithComponent(string) logger.Logger                  { return l }
+
+func TestClient_IdentityPropagationAndOneSanitizedLog(t *testing.T) {
+	if err := observability.RegisterPropagatedLabel("httpclient_test_label"); err != nil {
+		t.Fatal(err)
+	}
+	var headers []http.Header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headers = append(headers, r.Header.Clone())
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	ctx := observability.EnsureFieldBag(context.Background())
+	ctx = observability.WithRequestID(ctx, "req-http-client")
+	_ = observability.SetUserID(ctx, "user-42")
+	_ = observability.SetLabel(ctx, "httpclient_test_label", "propagated")
+	recorder := &capturedLogger{}
+	client := NewClient(recorder, WithoutTracing())
+	_, err := client.Get(ctx, server.URL+"/resource?token=secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestURL := strings.Replace(server.URL, "http://", "http://client-user:client-secret@", 1) + "/resource?token=secret"
+	_, err = NewClient(recorder, WithInternalPropagation(), WithoutTracing()).Get(ctx, requestURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if headers[0].Get("X-Request-ID") != "" || headers[0].Get("X-User-ID") != "" || headers[0].Get("X-Label-httpclient_test_label") != "" {
+		t.Fatalf("external request received identity headers: %#v", headers[0])
+	}
+	if headers[1].Get("X-Request-ID") != "req-http-client" || headers[1].Get("X-User-ID") != "user-42" || headers[1].Get("X-Label-httpclient_test_label") != "propagated" {
+		t.Fatalf("internal request missing identity headers: %#v", headers[1])
+	}
+	if len(recorder.services) != 2 {
+		t.Fatalf("expected one service log per call, got %d", len(recorder.services))
+	}
+	for _, service := range recorder.services {
+		loggedURL, _ := service.Metadata["url"].(string)
+		if strings.Contains(loggedURL, "token=") || strings.Contains(loggedURL, "secret") || loggedURL != server.URL+"/resource" {
+			t.Fatalf("request URL was not sanitized: %q", loggedURL)
+		}
+		if service.Status != "success" {
+			t.Fatalf("unexpected call status: %q", service.Status)
+		}
+	}
+}
+
+func TestClient_BodyLoggingRequiresAndUsesMasker(t *testing.T) {
+	const secret = "response-secret-value"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(secret))
+	}))
+	defer server.Close()
+	recorder := &capturedLogger{}
+	masker := func([]byte) []byte { return []byte("[masked]") }
+	client := NewClient(recorder, WithBodyLogging(masker), WithoutTracing())
+	_, err := client.Post(context.Background(), server.URL, map[string]string{"secret": secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata := recorder.services[0].Metadata
+	if metadata["request_body"] != "[masked]" || metadata["response_body"] != "[masked]" {
+		t.Fatalf("body mask was not applied: %#v", metadata)
+	}
+	if strings.Contains(fmt.Sprint(metadata), secret) {
+		t.Fatal("raw body secret appeared in logged metadata")
 	}
 }
