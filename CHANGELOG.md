@@ -39,6 +39,7 @@ This section records the internal foundation refresh completed in this workspace
 The Go module path is unchanged in this prepared state. A consuming internal release still requires `D-PATH` approval and a separate human-controlled release/tag action.
 
 ### Known Gaps Before Release
+- Outbox belum diverifikasi terhadap database nyata.
 - `GC-23` is resolved as OpenTelemetry OTLP to Elastic APM Server; no APM agent or `transaction.id` field is used.
 - `GC-24` is resolved as `METRICS_ENABLED=false` by default; metrics and `/metrics` are opt-in, and `app_transaction_total` is removed.
 - `D-PATH` (internal module path) remains open; no tag was created.
