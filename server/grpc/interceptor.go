@@ -61,22 +61,22 @@ func loggingInterceptor(app *app.App) grpc.UnaryServerInterceptor {
 		duration := time.Since(start).Milliseconds()
 		statusStr := "success"
 		errorCode := ""
-		errorCategory := ""
+		errorClass := ""
 
 		if err != nil {
 			statusStr = "failed"
 
-			// Map back to AppError if possible
 			var appErr *coreErrors.AppError
 			if errors.As(err, &appErr) {
-				errorCode = string(appErr.Code)
-				errorCategory = string(appErr.Category)
-				err = coreErrors.ToGRPC(appErr)
+				def, _ := coreErrors.Resolve(appErr.Code)
+				errorCode = def.Code
+				errorClass = string(def.Class)
 			} else {
-				errorCode = string(coreErrors.CodeInternal)
-				errorCategory = string(coreErrors.CategoryREC)
-				err = coreErrors.ToGRPC(err)
+				def, _ := coreErrors.Lookup("CORE-9000")
+				errorCode = def.Code
+				errorClass = string(def.Class)
 			}
+			err = coreErrors.ToGRPC(err)
 		}
 
 		requestID := observability.GetRequestID(ctx)
@@ -87,9 +87,9 @@ func loggingInterceptor(app *app.App) grpc.UnaryServerInterceptor {
 			DurationMs: duration,
 			ErrorCode:  errorCode,
 			Metadata: map[string]interface{}{
-				"method":         info.FullMethod,
-				"error_category": errorCategory,
-				"request_id":     requestID,
+				"method":      info.FullMethod,
+				"error_class": errorClass,
+				"request_id":  requestID,
 			},
 		})
 

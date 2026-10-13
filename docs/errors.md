@@ -1,27 +1,10 @@
-# Error Taxonomy and Handling
+# Error Registry and Handling
 
-The `go-core` library enforces a strictly structured error system built around bounds-checked categories, explicit finality, and traceable metadata. 
+The `errors` package uses an open response-code registry. Register each application code with its class, HTTP status, gRPC status, finality, retryability, and safe default message. Built-in codes use the `CORE-` prefix; unknown codes resolve to `CORE-9000`.
 
 ## The `AppError` Contract
 
-All application-facing errors must be represented by `AppError`, which provides:
-- **Domain**: Prefix assigned by the owning service boundary (e.g., `TRF`, `AUTH`).
-- **Category**: Actionable groupings of technical and business behaviors.
-- **Number**: The specific identifier.
-- **UserMessage**: Safe, user-facing explanation localized for frontends.
-- **Finality**: Indicates whether a caller should attempt to retry.
-- **Retryable**: Boolean mapping to Finality.
-
-The generated error code string takes the shape `<DOMAIN>-<CATEGORY>-<NUMBER>` (e.g., `TRF-VAL-001`).
-
-## Categories
-
-- `VAL`: Validation errors (Bad Requests, malformed structures)
-- `AUTH`: Authentication and permission errors (Unauthorized, Forbidden)
-- `SES`: Session-related errors
-- `SWI`: Upstream/Switch partner integration errors
-- `DB`: Database or caching data resolution errors
-- `REC`: Uncategorized generic technical errors
+`AppError` carries a registry code, technical message, optional validation details, and an internal wrapped error. The registry is authoritative for class, finality, retryability, and transport statuses. Supply localized user-facing messages through `MessageProvider`; otherwise the registry's safe default message is used.
 
 ## Finality Levels
 
@@ -30,10 +13,10 @@ The generated error code string takes the shape `<DOMAIN>-<CATEGORY>-<NUMBER>` (
 - `Technical Non-Recoverable`: Terminal technical constraints. Non-retryable (e.g., invalid schema).
 - `Ambiguous`: Fallback state when intention is not known.
 
-## gRPC Mapping
+## Registration and gRPC Mapping
 
-The `errors/grpc_mapper.go` maps internal `AppError` payloads to gRPC `status` responses automatically, packing extended metadata like `domain`, `user_message`, and `retryable` into the Protobuf `errdetails.ErrorInfo.Metadata` map. This ensures zero data loss between microservices.
+Use `Register` to add definitions; duplicate or invalid definitions fail. `Lookup` is safe for concurrent reads. `ToGRPC` uses the registered gRPC status and attaches `ErrorInfo` with code, class, finality, and retryability. Validation details are transported as `BadRequest` field violations. Unknown errors are sanitized to `CORE-9000`.
 
-## Gateway Edge Emittance
+## Gateway Status Mapping
 
-The edge HTTP Gateway `error_handler.go` intercepts gRPC responses and maps them strictly to a 9-field standard JSON representation, seamlessly hydrating `trace_id` from OpenTelemetry, and `transaction_id` from the observability context.
+The gateway resolves registered codes to their configured HTTP status. Its existing error-body shape remains in place until the response-envelope change in WS-4.

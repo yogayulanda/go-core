@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/yogayulanda/go-core/app"
-	coreErrors "github.com/yogayulanda/go-core/errors"
 	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/observability"
 )
@@ -50,8 +49,8 @@ func withSignatureValidation(application *app.App, next http.Handler) http.Handl
 			}
 			w.WriteHeader(http.StatusUnauthorized)
 
-			errResp := coreErrors.ErrorResponse{
-				Code:    string(coreErrors.CodeUnauthorized),
+			errResp := legacyGatewayError{
+				Code:    "CORE-1001",
 				Message: "unauthorized request",
 				TraceID: requestID,
 			}

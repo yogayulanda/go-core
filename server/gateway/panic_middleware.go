@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/yogayulanda/go-core/app"
-	coreErrors "github.com/yogayulanda/go-core/errors"
 	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/observability"
 )
@@ -36,8 +35,8 @@ func withPanicRecovery(application *app.App, next http.Handler) http.Handler {
 				}
 				w.WriteHeader(http.StatusInternalServerError)
 
-				errResp := coreErrors.ErrorResponse{
-					Code:    string(coreErrors.CodeInternal),
+				errResp := legacyGatewayError{
+					Code:    "CORE-9000",
 					Message: "internal server error",
 					TraceID: requestID,
 				}
