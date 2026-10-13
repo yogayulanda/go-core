@@ -12,6 +12,7 @@ import (
 	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/messaging"
 	"github.com/yogayulanda/go-core/observability"
+	"github.com/yogayulanda/go-core/observability/diagnostics"
 	coreversion "github.com/yogayulanda/go-core/version"
 )
 
@@ -138,6 +139,19 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		dbs:            dbs,
 		redisCache:     redisClient,
 		memcachedCache: memcachedClient,
+	}
+	if cfg.Diagnostics.Enabled {
+		diagnosticsCtx, cancelDiagnostics := context.WithCancel(context.Background())
+		diagnostics.New(diagnostics.Config{
+			HeapThresholdPercent: cfg.Diagnostics.HeapThresholdPercent,
+			GoroutineThreshold:   cfg.Diagnostics.GoroutineThreshold,
+			Cooldown:             cfg.Diagnostics.Cooldown,
+			CheckInterval:        cfg.Diagnostics.CheckInterval,
+		}, log).Start(diagnosticsCtx)
+		lifecycle.Register(func(context.Context) error {
+			cancelDiagnostics()
+			return nil
+		})
 	}
 
 	log.LogService(ctx, logger.ServiceLog{

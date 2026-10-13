@@ -104,7 +104,11 @@ type ObservabilityConfig struct {
 }
 
 type DiagnosticsConfig struct {
-	Enabled bool // used from WS-7a
+	Enabled              bool
+	HeapThresholdPercent int
+	GoroutineThreshold   int
+	Cooldown             time.Duration
+	CheckInterval        time.Duration
 }
 
 type LogConfig struct {

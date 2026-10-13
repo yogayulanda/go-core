@@ -60,6 +60,9 @@ func TestLoad_MigrationDefaultsAreExplicit(t *testing.T) {
 	if len(cfg.Log.MaskKeys) == 0 {
 		t.Fatal("expected default log mask keys")
 	}
+	if cfg.Diagnostics.HeapThresholdPercent != 80 || cfg.Diagnostics.GoroutineThreshold != 5000 || cfg.Diagnostics.Cooldown != 10*time.Minute || cfg.Diagnostics.CheckInterval != 30*time.Second {
+		t.Fatalf("unexpected diagnostics defaults: %+v", cfg.Diagnostics)
+	}
 }
 
 func TestLoad_ActiveEnvironmentVariablesMapToConfig(t *testing.T) {

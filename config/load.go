@@ -79,7 +79,13 @@ func Load(opts ...Option) (*Config, error) {
 			SlowQueryThreshold:   time.Second,
 			SlowRequestThreshold: 3 * time.Second,
 		},
-		Diagnostics: DiagnosticsConfig{Enabled: getBool("DIAG_ENABLED", true)},
+		Diagnostics: DiagnosticsConfig{
+			Enabled:              getBool("DIAG_ENABLED", true),
+			HeapThresholdPercent: 80,
+			GoroutineThreshold:   5000,
+			Cooldown:             10 * time.Minute,
+			CheckInterval:        30 * time.Second,
+		},
 		Auth: AuthConfig{
 			Signature: SignatureConfig{
 				Enabled:      strings.TrimSpace(getString("AUTH_SIGNATURE_MASTER_KEY", "")) != "",

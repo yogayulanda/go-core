@@ -49,6 +49,7 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 		runtime.WithErrorHandler(customErrorHandler(application)),
 		runtime.WithIncomingHeaderMatcher(incomingHeaderMatcher),
 		runtime.WithOutgoingHeaderMatcher(outgoingHeaderMatcher),
+		runtime.WithMiddlewares(captureMatchedRoute),
 	)
 
 	ctx := context.Background()

@@ -33,6 +33,17 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 	if c.App.ShutdownTimeout <= 0 {
 		issues = append(issues, issue("app", "ShutdownTimeout", "ShutdownTimeout must be > 0"))
 	}
+	if c.Diagnostics.Enabled {
+		if c.Diagnostics.HeapThresholdPercent < 1 || c.Diagnostics.HeapThresholdPercent > 100 {
+			issues = append(issues, issue("diagnostics", "HeapThresholdPercent", "HeapThresholdPercent must be between 1 and 100 when diagnostics are enabled"))
+		}
+		if c.Diagnostics.GoroutineThreshold <= 0 {
+			issues = append(issues, issue("diagnostics", "GoroutineThreshold", "GoroutineThreshold must be > 0 when diagnostics are enabled"))
+		}
+		if c.Diagnostics.Cooldown <= 0 || c.Diagnostics.CheckInterval <= 0 {
+			issues = append(issues, issue("diagnostics", "CooldownAndCheckInterval", "diagnostic Cooldown and CheckInterval must be > 0 when diagnostics are enabled"))
+		}
+	}
 	if c.Log.SlowQueryThreshold < 0 {
 		issues = append(issues, issue("log", "SlowQueryThreshold", "SlowQueryThreshold must be >= 0"))
 	}
