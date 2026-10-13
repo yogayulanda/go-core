@@ -55,7 +55,7 @@ func NewWithOptions(serviceName string, level string, options Options) (Logger, 
 		encoderConfig.EnableStackTrace = false
 		jsonConfig := encoderConfig.ToZapCoreEncoderConfig()
 		jsonConfig.EncodeTime = ecsTimeEncoder
-		core = ecszap.WrapCore(zapcore.NewCore(zapcore.NewJSONEncoder(jsonConfig), orderedECSWriter{output: writeSyncer}, parsedLevel))
+		core = ecszap.WrapCore(zapcore.NewCore(zapcore.NewJSONEncoder(jsonConfig), writeSyncer, parsedLevel))
 	}
 	base := zap.New(core).With(
 		zap.String("service.name", serviceName),

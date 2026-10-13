@@ -2,7 +2,11 @@ package grpc
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"io"
 	"os"
@@ -16,8 +20,10 @@ import (
 	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/observability"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -199,5 +205,107 @@ func TestDirectGRPCServer_UnregisteredCodeWritesOneWarningAccessLog(t *testing.T
 	}
 	if accessCount != 1 {
 		t.Fatalf("expected exactly one gRPC access log, got %d; output=%s", accessCount, raw)
+	}
+}
+
+func TestDirectGRPCServer_AuthRejectionLogsOnceWithoutAuthorizationOrToken(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate verifier key: %v", err)
+	}
+	publicDER, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal verifier key: %v", err)
+	}
+	publicPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicDER})
+
+	previousStdout := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stdout pipe: %v", err)
+	}
+	os.Stdout = writer
+	defer func() {
+		os.Stdout = previousStdout
+		_ = reader.Close()
+		_ = writer.Close()
+	}()
+
+	application, err := app.New(context.Background(), &config.Config{
+		App:       config.AppConfig{ServiceName: "grpc-auth-rejection-test", Environment: "dev", LogLevel: "debug", ShutdownTimeout: time.Second},
+		GRPC:      config.GRPCConfig{Port: 0},
+		Auth:      config.AuthConfig{InternalJWT: config.InternalJWTConfig{Enabled: true, PublicKey: string(publicPEM)}},
+		Databases: map[string]config.DBConfig{},
+	})
+	if err != nil {
+		t.Fatalf("initialize app: %v", err)
+	}
+	server, err := New(application)
+	if err != nil {
+		t.Fatalf("initialize gRPC server: %v", err)
+	}
+	server.Register(func(server *grpc.Server) {
+		server.RegisterService(directServiceDescription("test.AuthRequired", func(context.Context) error { return nil }), directUnknownCodeService{})
+	})
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- server.Start() }()
+	conn, err := grpc.NewClient(server.lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("dial gRPC server: %v", err)
+	}
+	const secretToken = "secret-token-never-log"
+	callErr := conn.Invoke(metadata.NewOutgoingContext(context.Background(), metadata.Pairs("authorization", "Bearer "+secretToken, "x-request-id", "auth-reject-1")), "/test.AuthRequired/Call", &emptypb.Empty{}, &emptypb.Empty{})
+	if status.Code(callErr) != codes.Unauthenticated {
+		t.Fatalf("expected gRPC Unauthenticated (HTTP 401 mapping), got %v", callErr)
+	}
+	unauthorizedDef, registered := coreErrors.Lookup("CORE-1001")
+	if !registered || unauthorizedDef.HTTPStatus != 401 || unauthorizedDef.GRPCCode != codes.Unauthenticated {
+		t.Fatalf("expected CORE-1001 to map to HTTP 401/gRPC Unauthenticated, got %+v", unauthorizedDef)
+	}
+	_ = conn.Close()
+	server.server.Stop()
+	_ = server.lis.Close()
+	<-serveDone
+	_ = writer.Close()
+	os.Stdout = previousStdout
+	raw, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read captured logs: %v", err)
+	}
+	output := string(raw)
+	if strings.Contains(output, "Authorization") || strings.Contains(output, secretToken) {
+		t.Fatalf("authentication header or token leaked to logs: %s", output)
+	}
+
+	accessCount := 0
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		var entry map[string]interface{}
+		if json.Unmarshal([]byte(line), &entry) != nil || entry["app.log_type"] != "access" {
+			continue
+		}
+		accessCount++
+		if entry["app.response_code"] != "CORE-1001" || entry["app.class"] != "FAILED" || entry["log.level"] != "info" {
+			t.Fatalf("unexpected auth-rejection access log: %#v", entry)
+		}
+	}
+	if accessCount != 1 {
+		t.Fatalf("expected exactly one gRPC access log, got %d; output=%s", accessCount, output)
+	}
+}
+
+func directServiceDescription(service string, call func(context.Context) error) *grpc.ServiceDesc {
+	return &grpc.ServiceDesc{
+		ServiceName: service,
+		HandlerType: (*interface{})(nil),
+		Methods: []grpc.MethodDesc{{
+			MethodName: "Call",
+			Handler: func(_ interface{}, ctx context.Context, _ func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+				handler := func(context.Context, interface{}) (interface{}, error) { return nil, call(ctx) }
+				if interceptor == nil {
+					return handler(ctx, nil)
+				}
+				return interceptor(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/" + service + "/Call"}, handler)
+			},
+		}},
 	}
 }

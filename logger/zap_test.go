@@ -44,9 +44,6 @@ func TestJSONLoggerUsesECSUTCMillisecondsWithoutANSI(t *testing.T) {
 	log.Info(context.Background(), "ecs message", Field{Key: "app.log_type", Value: "service"})
 
 	line := strings.TrimSpace(output.String())
-	if !(strings.Index(line, `"@timestamp"`) < strings.Index(line, `"log.level"`) && strings.Index(line, `"log.level"`) < strings.Index(line, `"message"`)) {
-		t.Fatalf("ECS field order must start with @timestamp, log.level, message: %s", line)
-	}
 	if strings.Contains(line, "\x1b[") {
 		t.Fatalf("JSON must not contain ANSI codes: %q", line)
 	}
