@@ -1,4 +1,4 @@
-# Proposed Context Patch: GC-28 Go Toolchain Policy
+# Proposed Context Patch: GC-40 Go Toolchain Policy
 
 Status: promoted on 2026-10-14 to `.forge/context/12-runtime-deployment-and-config.md` and `.forge/context/14-decisions-assumptions-and-constraints.md`.
 
@@ -6,7 +6,7 @@ Status: promoted on 2026-10-14 to `.forge/context/12-runtime-deployment-and-conf
 
 Replace the Go-version constraints in `.forge/context/14-decisions-assumptions-and-constraints.md` and `.forge/context/12-runtime-deployment-and-config.md` with:
 
-- `GC-28`: Follow a rolling N-1 Go policy. Use the latest patch of the N-1 minor line, advance the target minor with Go's February/August releases, and apply security patches within 14 days.
+- `GC-40`: Follow a rolling N-1 Go policy. Use the latest patch of the N-1 minor line, advance the target minor with Go's February/August releases, and apply security patches within 14 days.
 - The `go` directive in `go.mod` is the minimum required by the selected dependency graph and is determined with `go mod tidy`; it is not automatically the installed Go patch version.
 - Prefer stable dependency releases older than 14 days. An official maintainer's minimum security fix may be younger when needed to remediate an advisory; record the release date, age, and exception.
 
