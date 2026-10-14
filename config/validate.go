@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"strings"
 )
 
@@ -148,8 +149,20 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 		}
 	}
 
-	if c.Auth.InternalJWT.Enabled && strings.TrimSpace(c.Auth.InternalJWT.PublicKey) == "" {
-		issues = append(issues, issue("auth", "InternalJWT.PublicKey", "InternalJWT PublicKey is required when enabled"))
+	if c.Auth.InternalJWT.Enabled {
+		hasPublicKey := strings.TrimSpace(c.Auth.InternalJWT.PublicKey) != ""
+		jwksEndpoint := strings.TrimSpace(c.Auth.InternalJWT.JWKSEndpoint)
+		hasJWKSEndpoint := jwksEndpoint != ""
+		if hasPublicKey == hasJWKSEndpoint {
+			message := "InternalJWT requires exactly one of PublicKey or JWKSEndpoint"
+			if hasPublicKey {
+				message += "; both are set; remove one"
+			}
+			issues = append(issues, issue("auth", "InternalJWT.KeySource", message))
+		}
+		if hasJWKSEndpoint && !validJWKSURL(jwksEndpoint, c.App.Environment) {
+			issues = append(issues, issue("auth", "InternalJWT.JWKSEndpoint", "InternalJWT JWKSEndpoint must be an https URL (http is allowed only in local)"))
+		}
 	}
 	if c.Auth.InternalJWT.Enabled && c.Auth.InternalJWT.Leeway < 0 {
 		issues = append(issues, issue("auth", "InternalJWT.Leeway", "InternalJWT Leeway must be >= 0 when enabled"))
@@ -179,6 +192,17 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 	}
 
 	return issues
+}
+
+func validJWKSURL(raw, environment string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	if strings.EqualFold(parsed.Scheme, "https") {
+		return true
+	}
+	return environment == "local" && strings.EqualFold(parsed.Scheme, "http")
 }
 
 func issue(section, field, message string) ValidationIssue {

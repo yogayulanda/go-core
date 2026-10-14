@@ -105,6 +105,40 @@ func TestValidate_InternalJWTIncludeOnlyValid(t *testing.T) {
 	}
 }
 
+func TestValidate_InternalJWTKeySourceOptions(t *testing.T) {
+	tests := []struct {
+		name        string
+		publicKey   string
+		jwksURL     string
+		environment string
+		wantError   string
+	}{
+		{name: "public key only", publicKey: "public-key", environment: "prod"},
+		{name: "jwks only", jwksURL: "https://keys.example.test/jwks", environment: "prod"},
+		{name: "both sources", publicKey: "public-key", jwksURL: "https://keys.example.test/jwks", environment: "prod", wantError: "InternalJWT requires exactly one of PublicKey or JWKSEndpoint; both are set; remove one"},
+		{name: "no source", environment: "prod", wantError: "InternalJWT requires exactly one of PublicKey or JWKSEndpoint"},
+		{name: "http jwks outside local", jwksURL: "http://keys.example.test/jwks", environment: "prod", wantError: "must be an https URL"},
+		{name: "http jwks in local", jwksURL: "http://keys.example.test/jwks", environment: "local"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := validBaseConfig()
+			cfg.App.Environment = test.environment
+			cfg.Auth.InternalJWT = InternalJWTConfig{Enabled: true, PublicKey: test.publicKey, JWKSEndpoint: test.jwksURL}
+			err := cfg.Validate()
+			if test.wantError == "" {
+				if err != nil {
+					t.Fatalf("unexpected validation error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.wantError) {
+				t.Fatalf("expected validation error %q, got %v", test.wantError, err)
+			}
+		})
+	}
+}
+
 func TestValidate_GRPCTLSEnabledWithoutFiles(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
