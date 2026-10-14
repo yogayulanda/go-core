@@ -22,15 +22,11 @@ func Load(opts ...Option) (*Config, error) {
 	for _, opt := range opts {
 		opt()
 	}
-	if err := validateNumericEnvironment(); err != nil {
-		return nil, err
-	}
+	var invalidValues []string
+	parseInt := func(key string, defaultVal int) int { return getInt(key, defaultVal, &invalidValues) }
+	parseBool := func(key string, defaultVal bool) bool { return getBool(key, defaultVal, &invalidValues) }
 
 	serviceName := strings.TrimSpace(getString("SERVICE_NAME", ""))
-	dbs, err := loadDatabases()
-	if err != nil {
-		return nil, err
-	}
 
 	cfg := &Config{
 		App: AppConfig{
@@ -40,7 +36,7 @@ func Load(opts ...Option) (*Config, error) {
 			DrainDelay:      3 * time.Second,
 			ShutdownTimeout: 25 * time.Second,
 		},
-		Databases: dbs,
+		Databases: map[string]DBConfig{},
 		Migration: MigrationConfig{
 			AutoRun:     false,
 			DBName:      "",
@@ -50,17 +46,17 @@ func Load(opts ...Option) (*Config, error) {
 			LockTimeout: 30 * time.Second,
 		},
 		GRPC: GRPCConfig{
-			Port:        getInt("GRPC_PORT", 50051),
+			Port:        parseInt("GRPC_PORT", 50051),
 			TLSEnabled:  false,
 			TLSCertFile: "",
 			TLSKeyFile:  "",
 		},
 		HTTP: HTTPConfig{
-			Port:               getInt("HTTP_PORT", 8080),
+			Port:               parseInt("HTTP_PORT", 8080),
 			TLSEnabled:         false,
 			TLSCertFile:        "",
 			TLSKeyFile:         "",
-			PprofEnabled:       getBool("HTTP_PPROF_ENABLED", false),
+			PprofEnabled:       parseBool("HTTP_PPROF_ENABLED", false),
 			CORSAllowedOrigins: getStringSlice("HTTP_CORS_ALLOWED_ORIGINS"),
 			CORSAllowedHeaders: []string{"Content-Type", "Authorization", "X-Request-ID"},
 			ReadHeaderTimeout:  5 * time.Second,
@@ -76,7 +72,7 @@ func Load(opts ...Option) (*Config, error) {
 			OTLPCACertFile:     "",
 			TraceSamplingRatio: 0.1,
 		},
-		Metrics: MetricsConfig{Enabled: getBool("METRICS_ENABLED", false)},
+		Metrics: MetricsConfig{Enabled: parseBool("METRICS_ENABLED", false)},
 		Log: LogConfig{
 			MaskKeys:             []string{"password", "passwd", "secret", "token", "authorization", "apikey", "api_key", "pin", "otp", "cvv", "card", "private_key", "session", "phone", "msisdn", "account", "cif", "nik"},
 			RequestStart:         false,
@@ -84,7 +80,7 @@ func Load(opts ...Option) (*Config, error) {
 			SlowRequestThreshold: 3 * time.Second,
 		},
 		Diagnostics: DiagnosticsConfig{
-			Enabled:              getBool("DIAG_ENABLED", true),
+			Enabled:              parseBool("DIAG_ENABLED", true),
 			HeapThresholdPercent: 80,
 			GoroutineThreshold:   5000,
 			Cooldown:             10 * time.Minute,
@@ -127,6 +123,15 @@ func Load(opts ...Option) (*Config, error) {
 		},
 		IgnoredEnvVars: ignoredEnvironmentVariableNames(),
 	}
+	dbs, dbErr := loadDatabases(&invalidValues)
+	cfg.Databases = dbs
+	if len(invalidValues) > 0 {
+		sort.Strings(invalidValues)
+		return nil, fmt.Errorf("invalid environment values:\n%s", strings.Join(invalidValues, "\n"))
+	}
+	if dbErr != nil {
+		return nil, dbErr
+	}
 
 	return cfg, nil
 }
@@ -141,7 +146,7 @@ func loadMemcachedConfig() MemcachedConfig {
 	}
 }
 
-func loadDatabases() (map[string]DBConfig, error) {
+func loadDatabases(invalidValues *[]string) (map[string]DBConfig, error) {
 	connections := getStringSlice("DB_LIST")
 
 	dbs := make(map[string]DBConfig)
@@ -151,7 +156,16 @@ func loadDatabases() (map[string]DBConfig, error) {
 			continue
 		}
 
-		cfg := loadDatabaseByConnection(conn)
+		cfg := loadDatabaseByConnection(conn, invalidValues)
+		dbs[conn] = cfg
+	}
+
+	for _, conn := range connections {
+		conn = NormalizeDBAlias(conn)
+		if conn == "" {
+			continue
+		}
+		cfg := dbs[conn]
 		if !isSupportedDBDriver(cfg.Driver) {
 			return nil, fmt.Errorf("DB_%s_DRIVER must be sqlserver or mysql", strings.ToUpper(conn))
 		}
@@ -188,13 +202,13 @@ func validateComposeFields(name string, cfg DBConfig) error {
 	return nil
 }
 
-func loadDatabaseByConnection(name string) DBConfig {
+func loadDatabaseByConnection(name string, invalidValues *[]string) DBConfig {
 	prefix := DatabaseEnvPrefix(name)
 
 	return DBConfig{
 		Driver:          strings.ToLower(getString(prefix+"DRIVER", "")),
 		Host:            getString(prefix+"HOST", ""),
-		Port:            getInt(prefix+"PORT", 0),
+		Port:            getInt(prefix+"PORT", 0, invalidValues),
 		Name:            getString(prefix+"NAME", ""),
 		User:            getString(prefix+"USER", ""),
 		Password:        getString(prefix+"PASSWORD", ""),
@@ -273,80 +287,30 @@ func getString(key, defaultVal string) string {
 	return val
 }
 
-func getInt(key string, defaultVal int) int {
+func getInt(key string, defaultVal int, invalidValues *[]string) int {
 	val := os.Getenv(key)
 	if val == "" {
 		return defaultVal
 	}
 	parsed, err := strconv.Atoi(val)
 	if err != nil {
+		*invalidValues = append(*invalidValues, invalidEnvironmentValue(key, val, "integer between 1 and 65535"))
 		return defaultVal
 	}
 	return parsed
 }
 
-func getBool(key string, defaultVal bool) bool {
+func getBool(key string, defaultVal bool, invalidValues *[]string) bool {
 	val := os.Getenv(key)
 	if val == "" {
 		return defaultVal
 	}
 	parsed, err := strconv.ParseBool(val)
 	if err != nil {
+		*invalidValues = append(*invalidValues, invalidEnvironmentValue(key, val, "true or false (also accepted: 1, 0, t, f, TRUE, FALSE)"))
 		return defaultVal
 	}
 	return parsed
-}
-
-func validateNumericEnvironment() error {
-	intKeys := []string{"GRPC_PORT", "HTTP_PORT"}
-	boolKeys := []string{"DIAG_ENABLED", "HTTP_PPROF_ENABLED", "METRICS_ENABLED"}
-	for _, entry := range os.Environ() {
-		name, _, _ := strings.Cut(entry, "=")
-		if strings.HasPrefix(name, "DB_") && strings.HasSuffix(name, "_PORT") && len(name) > len("DB__PORT") {
-			intKeys = append(intKeys, name)
-		}
-	}
-	intKeys = uniqueSortedStrings(intKeys)
-	boolKeys = uniqueSortedStrings(boolKeys)
-
-	var invalid []string
-	for _, key := range intKeys {
-		value := os.Getenv(key)
-		if value == "" {
-			continue
-		}
-		if _, err := strconv.Atoi(value); err != nil {
-			invalid = append(invalid, invalidEnvironmentValue(key, value, "integer (base-10)"))
-		}
-	}
-	for _, key := range boolKeys {
-		value := os.Getenv(key)
-		if value == "" {
-			continue
-		}
-		if _, err := strconv.ParseBool(value); err != nil {
-			invalid = append(invalid, invalidEnvironmentValue(key, value, "boolean accepted by strconv.ParseBool"))
-		}
-	}
-	if len(invalid) == 0 {
-		return nil
-	}
-	sort.Strings(invalid)
-	return fmt.Errorf("invalid environment values:\n%s", strings.Join(invalid, "\n"))
-}
-
-func uniqueSortedStrings(values []string) []string {
-	seen := make(map[string]struct{}, len(values))
-	unique := make([]string, 0, len(values))
-	for _, value := range values {
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		unique = append(unique, value)
-	}
-	sort.Strings(unique)
-	return unique
 }
 
 func invalidEnvironmentValue(key, value, expected string) string {

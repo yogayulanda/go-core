@@ -9,7 +9,7 @@ This changelog complements:
 
 ## [Unreleased]
 
-### v1.2.1 (Unreleased)
+## [1.2.1] - 2026-10-14
 
 ### Fixed
 - Reject malformed non-empty integer and boolean environment values instead of silently using defaults.

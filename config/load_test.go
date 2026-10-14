@@ -86,14 +86,40 @@ func TestLoad_InvalidNumericAndBooleanEnvironmentValues(t *testing.T) {
 			clearConfigEnvironment(t)
 			t.Setenv("SERVICE_NAME", "svc")
 			t.Setenv("APP_ENV", "local")
-			if strings.HasPrefix(test.name, "DB_") {
+			if strings.HasPrefix(test.name, "DB_") && test.name != "DB_ORPHAN_PORT" {
 				t.Setenv("DB_LIST", "primary")
 			}
 			t.Setenv(test.name, test.value)
 
 			_, err := Load()
+			if test.name == "DB_ORPHAN_PORT" {
+				if err != nil {
+					t.Fatalf("Load() error = %v, want success for unlisted DB alias port", err)
+				}
+				return
+			}
 			if err == nil || !strings.Contains(err.Error(), test.name) || !strings.Contains(err.Error(), test.value) {
 				t.Fatalf("Load() error = %v, want invalid value for %s", err, test.name)
+			}
+		})
+	}
+}
+
+func TestLoad_InvalidNumericAndBooleanValuesNameEveryEnvironmentVariable(t *testing.T) {
+	tests := []string{"GRPC_PORT", "HTTP_PORT", "DB_PRIMARY_PORT", "HTTP_PPROF_ENABLED", "METRICS_ENABLED", "DIAG_ENABLED"}
+	for _, name := range tests {
+		t.Run(name, func(t *testing.T) {
+			clearConfigEnvironment(t)
+			t.Setenv("SERVICE_NAME", "svc")
+			t.Setenv("APP_ENV", "local")
+			if name == "DB_PRIMARY_PORT" {
+				t.Setenv("DB_LIST", "primary")
+			}
+			t.Setenv(name, "x!")
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), name) {
+				t.Fatalf("Load() error = %v, want invalid value for %s", err, name)
 			}
 		})
 	}
