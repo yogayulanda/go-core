@@ -188,7 +188,7 @@ func invokeAuthInterceptor(
 	verifier *security.InternalJWTVerifier,
 	fullMethod string,
 	md metadata.MD,
-	) (called bool, claims *security.Claims, err error) {
+) (called bool, claims *security.Claims, err error) {
 	return invokeAuthInterceptorWithLogger(verifier, nil, fullMethod, md)
 }
 
