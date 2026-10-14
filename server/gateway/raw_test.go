@@ -150,15 +150,16 @@ func TestRawRouteAccessLogIncludesRequestID(t *testing.T) {
 		t.Fatal(err)
 	}
 	gateway, err := New(application, func(_ context.Context, mux *runtime.ServeMux) error {
-		return mux.HandlePath(http.MethodGet, "/raw", Raw(func(w http.ResponseWriter, _ *http.Request, _ map[string]string) {
-			_, _ = io.WriteString(w, "ok")
+		return mux.HandlePath(http.MethodPost, "/raw", Raw(func(w http.ResponseWriter, _ *http.Request, _ map[string]string) {
+			_, _ = io.WriteString(w, "private-response-body")
 		}))
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := httptest.NewRequest(http.MethodGet, "/raw", nil)
+	request := httptest.NewRequest(http.MethodPost, "/raw", strings.NewReader("private-request-body"))
 	request.Header.Set("X-Request-ID", "raw-access-request-1")
+	request.Header.Set("X-Private-Header", "private-header-value")
 	gateway.server.Handler.ServeHTTP(httptest.NewRecorder(), request)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	_ = application.Lifecycle().Shutdown(shutdownCtx)
@@ -172,13 +173,29 @@ func TestRawRouteAccessLogIncludesRequestID(t *testing.T) {
 	}
 
 	accessLines := 0
+	var accessEntry map[string]interface{}
 	for _, line := range strings.Split(string(logBytes), "\n") {
-		if strings.Contains(line, `"app.log_type":"access"`) && strings.Contains(line, `"labels.request_id":"raw-access-request-1"`) {
+		var entry map[string]interface{}
+		if json.Unmarshal([]byte(line), &entry) != nil {
+			continue
+		}
+		if entry["app.log_type"] == "access" && entry["labels.request_id"] == "raw-access-request-1" {
 			accessLines++
+			accessEntry = entry
 		}
 	}
 	if accessLines != 1 {
 		t.Fatalf("matching raw access log lines = %d, want exactly 1; logs=%s", accessLines, logBytes)
+	}
+	for _, field := range []string{"app.route", "app.method", "app.status_code", "app.response_code", "app.class", "app.duration_ms", "labels.request_id", "ecs.version"} {
+		if accessEntry[field] == nil {
+			t.Errorf("raw access log missing standard field %q: %#v", field, accessEntry)
+		}
+	}
+	for _, privateValue := range []string{"private-request-body", "private-response-body", "private-header-value"} {
+		if strings.Contains(string(logBytes), privateValue) {
+			t.Errorf("raw access log included payload/header value %q", privateValue)
+		}
 	}
 }
 
