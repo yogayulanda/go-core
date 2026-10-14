@@ -80,6 +80,19 @@ The following changes are consumer-visible. Plan them together with consuming-se
 
 No `GODEBUG` compatibility override is configured by go-core. Run service-specific TLS, endpoint validation, cgroup load, and performance checks before rollout.
 
+### Hot-path benchmark evidence
+
+An interleaved A/B/C comparison was run on 2026-10-14 with `GOMAXPROCS=4`, 20 rounds per variant, and `-run='^$' -benchmem -count=1` for each invocation. Benchstat found no statistically significant latency difference for the gateway or unary interceptor chain:
+
+| Benchmark | A: main / Go 1.24.13 | B: main / Go 1.26.9 | C: branch / Go 1.26.9 | A to B | B to C |
+|---|---:|---:|---:|---:|---:|
+| Gateway handler via `httptest.NewRecorder` | 28.08 us/op | 27.15 us/op | 29.62 us/op | -3.3%, p=0.799 | +9.1%, p=0.398 |
+| Unary interceptor chain | 40.74 us/op | 43.62 us/op | 46.19 us/op | +7.1%, p=0.383 | +5.9%, p=0.947 |
+
+Gateway allocations fell from 126 to 116 allocs/op between A and B (7.94% fewer), with no change between B and C; this is attributed to the toolchain, not dependencies. The matrix did not show a significant latency regression. Measurements run on WSL are noisy, with practical detection power around 10%; sub-10% differences should not be treated as reliable regressions without a stable Linux runner.
+
+The gateway benchmark is in-process: it uses `httptest.NewRecorder`, not a TCP listener, and does not traverse a grpc-gateway-to-gRPC hop. That proxy path remains unbenchmarked. The Go 1.26.9 build rejects `GOEXPERIMENT=nogreenteagc` (`unknown GOEXPERIMENT greenteagc`), so a no-Green-Tea-GC comparison was unavailable.
+
 ## Still Blocked / Deferred
 
 - `Q-SIG`: compatibility confirmation is deferred but is not a release blocker.

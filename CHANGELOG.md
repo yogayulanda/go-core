@@ -16,6 +16,7 @@ This changelog complements:
 - Upgrade advisory-listed dependencies and pin golangci-lint v2.14.0 with its v2 configuration.
 - Adopt the rolling N-1 toolchain policy; see `MIGRATION.md` and `docs/SECURITY_ADVISORIES.md`.
 - Go 1.25/1.26 runtime and standard-library defaults can change container CPU parallelism, GC behavior, TLS handshakes, certificate parsing, and malformed URL handling; consumers should run the checks documented in `MIGRATION.md`.
+- Interleaved Go 1.24.13/1.26.9 hot-path benchmarks found no significant latency regression; gateway allocations decreased from 126 to 116 allocs/op due to the toolchain. Results have approximately 10% detection limits on noisy WSL and do not cover the grpc-gateway-to-gRPC proxy hop. `nogreenteagc` was unavailable in Go 1.26.9.
 
 ## [1.1.0] - 2026-10-14
 

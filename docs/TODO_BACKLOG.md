@@ -28,6 +28,8 @@ This backlog tracks work intentionally left outside the completed foundation upd
 - Run `go test -tags=integration ./messaging/outbox/...` against disposable SQL Server and MySQL instances. Integration tests compile but were not run in the implementation environment because Docker was unavailable (S8).
 - Confirm which SASL mechanism the deployment's Kafka cluster uses. The library supports PLAIN, SCRAM-SHA-256, and SCRAM-SHA-512.
 - Reassess residual dependency advisories in `SECURITY_ADVISORIES.md` on each Go toolchain patch and minor upgrade.
+- Run the interleaved hot-path benchmark suite on a stable Linux CI runner and retain benchstat evidence as a regression guard; WSL is too noisy for reliable sub-10% decisions.
+- Add an end-to-end gateway benchmark that traverses grpc-gateway to a gRPC handler over bufconn; the current `httptest.NewRecorder` benchmark stops at an in-process HTTP handler.
 - Confirm deployment termination grace period exceeds `DrainDelay + ShutdownTimeout` (default total 28 seconds, below the common 30-second value but leaves little margin).
 
 ## Deferred Platform Work
