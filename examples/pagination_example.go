@@ -48,9 +48,6 @@ func NormalizeOffsetPage(req OffsetPageRequest) (offset int, limit int, err erro
 
 func BuildOffsetPageResult(offset int, limit int, returned int) OffsetPageResult {
 	hasMore := returned > limit
-	if hasMore {
-		returned = limit
-	}
 
 	nextCursor := ""
 	if hasMore {

@@ -26,6 +26,28 @@ Gateway memasang `/health`, `/ready`, `/version`, `/metrics`, CORS allowlist, bo
 
 Saat shutdown, `/ready` menjadi 503 dan gRPC health menjadi `NOT_SERVING`, kemudian `DrainDelay` (3s default) berjalan sebelum server dihentikan graceful di bawah `ShutdownTimeout` (25s default). `ShutdownTimeout + DrainDelay` sebaiknya muat dalam termination grace period.
 
+### Raw Gateway Responses
+
+Route gateway normal membungkus response 2xx dengan success envelope go-core. Gunakan `gateway.Raw` untuk route yang harus meneruskan response transport apa adanya, misalnya transparent proxy, webhook callback, atau file download:
+
+```go
+err := mux.HandlePath(http.MethodGet, "/partner/{id}", gateway.Raw(func(w http.ResponseWriter, r *http.Request, params map[string]string) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    _, _ = w.Write([]byte(`{"partner":"response"}`))
+}))
+```
+
+Untuk handler biasa yang mengimplementasikan `http.Handler`, bungkus dengan `gateway.RawHTTP(handler)` lalu panggil dari adapter `HandlePath`:
+
+```go
+err := mux.HandlePath(http.MethodGet, "/download", func(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+    gateway.RawHTTP(downloadHandler).ServeHTTP(w, r)
+})
+```
+
+Raw melewati success envelope saja; request identity, panic recovery, body limit, signature validation, tracing, CORS, metrics, dan access logging tetap berlaku. Handler bertanggung jawab penuh atas status, headers, content type, body, serta format error response. Jangan gunakan Raw untuk API normal yang mengandalkan envelope go-core. Untuk menemukan pendaftaran raw di source service, jalankan `rg -n 'gateway\.Raw(HTTP)?\('`.
+
 ## Database And Transactions
 
 SQL driver yang didukung: `sqlserver` dan `mysql`. `database.New(cfg, log, database.WithSlowQueryThreshold(time.Second))` mengembalikan wrapper yang menyediakan raw `*sql.DB` dan `Gorm()`.
@@ -70,4 +92,16 @@ Consumer concurrency is keyed by partition: a partition has one FIFO worker, and
 
 Tracing is OpenTelemetry OTLP to Elastic APM Server via `APM_ENDPOINT`; no Elastic APM agent is used and logs do not include `transaction.id`. Metrics are disabled by default; set `METRICS_ENABLED=true` to record metrics and register `/metrics`. `app_transaction_total` is removed.
 
-Downstream forks may adjust the module path before adoption. `Q-SIG` confirmation is deferred but is not a release blocker. Keep `go 1.24.3` in `go.mod`; the current build image uses Go 1.24.13 and the next upgrade target is Go 1.26.x.
+Downstream forks may adjust the module path before adoption. `Q-SIG` confirmation is deferred but is not a release blocker. Consumers need Go 1.26.0 or newer; CI validates with Go 1.26.9. The rolling N-1 toolchain and security-patch policy is described in `MIGRATION.md`.
+
+## Hot-Path Benchmark Method
+
+Use this method when deciding whether a toolchain or dependency change regresses the gateway, interceptor, or outbox paths:
+
+- Set `GOMAXPROCS=4` for every compared variant.
+- Exclude tests with `-run='^$'`; use `-benchmem` and ten or more independent samples.
+- Interleave variants to reduce drift, running each variant with `-count=1` in every round. The upgrade comparison used 20 rounds, each executing A (main + Go 1.24.13), B (main + Go 1.26.9), then C (branch + Go 1.26.9).
+- Compare samples with `benchstat`, reporting latency, bytes, allocations, sample counts, and significance. Compare A to B for toolchain/runtime effects and B to C for dependency/code effects.
+- A hot-path regression gate is valid only for measurements made with this locked-procs, interleaved method on a stable runner. WSL measurements are noisy and have roughly 10% practical detection limits; confirm borderline results on a stable Linux CI runner.
+
+The recorded gateway measurement uses `httptest.NewRecorder` and does not include a TCP or grpc-gateway-to-gRPC proxy hop. Track that path separately using an in-process gRPC transport such as bufconn. Go 1.26.9 does not recognize `GOEXPERIMENT=nogreenteagc`, so the alternate-GC comparison is unavailable.

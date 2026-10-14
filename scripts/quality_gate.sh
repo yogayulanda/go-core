@@ -15,7 +15,7 @@ fi
 
 if [[ ! -x "$(command -v "$lint_bin" 2>/dev/null || true)" ]] && [[ ! -x "$lint_bin" ]]; then
   echo "golangci-lint not found. install with:"
-  echo "go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8"
+  echo "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0"
   exit 1
 fi
 

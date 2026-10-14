@@ -13,7 +13,7 @@ vet:
 	$(GO) vet ./...
 
 lint:
-	@command -v $(GOLANGCI_LINT) >/dev/null 2>&1 || (echo "golangci-lint not found. install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8" && exit 1)
+	@command -v $(GOLANGCI_LINT) >/dev/null 2>&1 || (echo "golangci-lint not found. install with: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0" && exit 1)
 	$(GOLANGCI_LINT) run
 
 check: test vet lint

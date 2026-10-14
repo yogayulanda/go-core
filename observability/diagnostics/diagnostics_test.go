@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
-	goruntime "runtime"
 	"runtime/metrics"
 	"strings"
 	"testing"
@@ -165,12 +164,12 @@ func waitForGoroutineCount(b *testing.B, expected int) {
 	b.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if goruntime.NumGoroutine() >= expected+2 {
+		if runtime.NumGoroutine() >= expected+2 {
 			return
 		}
 		time.Sleep(time.Millisecond)
 	}
-	b.Fatalf("only observed %d goroutines", goruntime.NumGoroutine())
+	b.Fatalf("only observed %d goroutines", runtime.NumGoroutine())
 }
 
 type pauseHistogram struct {

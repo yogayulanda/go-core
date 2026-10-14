@@ -1,0 +1,29 @@
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+                      │ docs/benchmarks/2026-10-14-go-1.26/matrix-A-main-go1.24.13.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-B-main-go1.26.9.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-C-branch-go1.26.9.txt │
+                      │                             sec/op                             │                   sec/op                     vs base          │                    sec/op                      vs base          │
+GatewayHTTPEndToEnd-4                                                     28.08µ ± 11%                                  27.15µ ± 20%  ~ (p=0.799 n=20)                                    29.62µ ± 11%  ~ (p=0.445 n=20)
+
+                      │ docs/benchmarks/2026-10-14-go-1.26/matrix-A-main-go1.24.13.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-B-main-go1.26.9.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-C-branch-go1.26.9.txt │
+                      │                              B/op                              │                  B/op                   vs base               │                   B/op                    vs base               │
+GatewayHTTPEndToEnd-4                                                     12.50Ki ± 0%                             12.35Ki ± 0%  -1.26% (p=0.000 n=20)                               12.35Ki ± 0%  -1.26% (p=0.000 n=20)
+
+                      │ docs/benchmarks/2026-10-14-go-1.26/matrix-A-main-go1.24.13.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-B-main-go1.26.9.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-C-branch-go1.26.9.txt │
+                      │                           allocs/op                            │               allocs/op                 vs base               │                allocs/op                  vs base               │
+GatewayHTTPEndToEnd-4                                                       126.0 ± 0%                               116.0 ± 0%  -7.94% (p=0.000 n=20)                                 116.0 ± 0%  -7.94% (p=0.000 n=20)
+
+pkg: github.com/yogayulanda/go-core/server/grpc
+                        │ docs/benchmarks/2026-10-14-go-1.26/matrix-A-main-go1.24.13.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-B-main-go1.26.9.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-C-branch-go1.26.9.txt │
+                        │                             sec/op                             │                   sec/op                     vs base          │                    sec/op                      vs base          │
+UnaryInterceptorChain-4                                                     40.74µ ± 10%                                  43.62µ ± 18%  ~ (p=0.383 n=20)                                    46.19µ ± 14%  ~ (p=0.383 n=20)
+
+                        │ docs/benchmarks/2026-10-14-go-1.26/matrix-A-main-go1.24.13.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-B-main-go1.26.9.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-C-branch-go1.26.9.txt │
+                        │                              B/op                              │                    B/op                      vs base          │                     B/op                       vs base          │
+UnaryInterceptorChain-4                                                     10.89Ki ± 0%                                  10.90Ki ± 0%  ~ (p=0.337 n=20)                                    10.89Ki ± 0%  ~ (p=0.245 n=20)
+
+                        │ docs/benchmarks/2026-10-14-go-1.26/matrix-A-main-go1.24.13.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-B-main-go1.26.9.txt │ docs/benchmarks/2026-10-14-go-1.26/matrix-C-branch-go1.26.9.txt │
+                        │                           allocs/op                            │                 allocs/op                  vs base            │                  allocs/op                   vs base            │
+UnaryInterceptorChain-4                                                       133.0 ± 0%                                  133.0 ± 0%  ~ (p=1.000 n=20) ¹                                    133.0 ± 0%  ~ (p=1.000 n=20) ¹
+¹ all samples are equal
