@@ -37,9 +37,11 @@ Additional transitive upgrades:
 | `github.com/grpc-ecosystem/grpc-gateway/v2` | v2.27.8 | v2.29.0 | 2026-04-15 | 182 | Required by grpc dependency graph. |
 | `github.com/go-logr/logr` | v1.4.3 | v1.4.4 | 2026-07-20 | 86 | Required by OTel dependency graph. |
 | `go.opentelemetry.io/proto/otlp` | v1.9.0 | v1.11.0 | 2026-07-22 | 84 | Required by OTel exporter. |
+| `go.opentelemetry.io/otel/sdk/metric` | v1.40.0 | v1.45.0 | 2026-08-03 | 72 | Required by OTel SDK; module graph only. |
 | `golang.org/x/sync` | v0.19.0 | v0.23.0 | 2026-08-31 | 44 | Required by the selected security dependency graph. |
 | `google.golang.org/genproto/googleapis/api` | 2026-02-09 revision | 2026-08-03 revision | 2026-08-03 | 72 | Required by grpc/gateway graph. |
 | `google.golang.org/genproto/googleapis/rpc` | 2026-02-09 revision | 2026-08-03 revision | 2026-08-03 | 72 | Required by grpc graph. |
+| `gonum.org/v1/gonum` | v0.16.0 | v0.17.0 | 2025-12-29 | 289 | Required through grpc test dependencies; module graph only. |
 
 ## Go Standard Library
 
