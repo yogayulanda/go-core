@@ -202,11 +202,18 @@ A request ID lets operators connect gateway logs, gRPC logs, and downstream call
 ```go
 ctx := observability.EnsureFieldBag(ctx)
 _ = observability.SetUserID(ctx, userID)
+_ = observability.SetLabel(ctx, "client_app", "app-a")
+```
+
+**Excerpt, at startup (once):**
+
+```go
 if err := observability.RegisterPropagatedLabel("client_app"); err != nil {
 	return err
 }
-_ = observability.SetLabel(ctx, "client_app", "app-a")
 ```
+
+Register propagated labels once during startup; do not call `RegisterPropagatedLabel` per request.
 
 `httpclient.WithInternalPropagation()` forwards request ID, user ID, and registered labels to HTTP destinations. It does not validate destination hosts. GC-27 records the trust boundary: HTTP propagation is caller-controlled, and Kafka identity headers are trusted based on internal network/producer controls, not per-message authentication. Forward identity only to destinations your service is authorized to trust.
 
@@ -519,7 +526,7 @@ No diagnostic snapshot is taken unless a configured threshold is crossed.
 | How to turn off | Keep signature/JWT disabled, CORS origins empty, and pprof false; body limit remains required. |
 
 - **HTTP signatures:** a nonempty `AUTH_SIGNATURE_MASTER_KEY` enables HMAC-SHA256 validation of method, path, timestamp, and body. Defaults are `x-signature`, `x-timestamp`, and five-minute drift. The integration-specific signature contract still needs consumer confirmation; see `Q-SIG` in [Security](docs/SECURITY.md).
-- **Internal JWT:** disabled by default. Enabling requires `Auth.InternalJWT.PublicKey`; the verifier accepts RS256/384/512 and can use JWKS configuration. Include-method and exclude-method lists cannot both be set.
+- **Internal JWT:** disabled by default. When enabled, choose exactly one key source: `PublicKey` for a static key rotated through deployment, or `JWKSEndpoint` for automatic rotation. Setting both or neither is rejected at startup. JWKS must use HTTPS except in `APP_ENV=local`. The verifier accepts RS256/384/512. Include-method and exclude-method lists cannot both be set.
 - **Body limit:** default 1 MiB. Oversize requests return 413 with `CORE-1005`.
 - **CORS:** disabled unless exact origins are configured. Do not use wildcard policy as a substitute for an origin allowlist.
 - **pprof:** disabled by default. Enabling it in `prod`/`production` makes gateway construction fail.
@@ -565,7 +572,7 @@ These helpers are test-only; they do not change runtime behavior. Use `WithIsola
 
 ## Configuration Reference
 
-Rule: environment variables configure infrastructure, credentials, and explicit kill switches. Set other runtime options as `Config` fields after `config.Load()` and before `Validate()`/`app.New()`. Setting an optional integration address/list enables it.
+Rule: environment variables configure infrastructure, credentials, and explicit kill switches. Non-empty invalid integer/boolean values fail during `config.Load()`; booleans must use a value accepted by `strconv.ParseBool` (`1`, `t/T`, `true/True/TRUE`, `0`, `f/F`, or `false/False/FALSE`). Set other runtime options as `Config` fields after `config.Load()` and before `Validate()`/`app.New()`. Setting an optional integration address/list enables it.
 
 The full source-derived environment and code-field tables are in [Configuration Reference](docs/CONFIGURATION.md). That file also lists removed environment names, the local `.env` example, and code overrides. At startup, look for the `effective_config` log record; secret values are redacted.
 
@@ -605,6 +612,8 @@ The full source-derived environment and code-field tables are in [Configuration 
 11. **A plain `HandlePath` route has no access log.** Successful direct handlers that do not call gRPC currently have this known gap. gRPC-backed routes log at the interceptor; Raw routes log at the envelope boundary. See [TODO backlog](docs/TODO_BACKLOG.md).
 
 12. **A `DEAD` outbox event blocks later events.** Ordering is per key. Resolve or replay the older event before later rows for that key can proceed.
+
+13. **Configuration fails at startup.** `config.Load` reports non-empty invalid integer and boolean values together; booleans accept only `1`, `t/T`, `true/True/TRUE`, `0`, `f/F`, or `false/False/FALSE`. Replace non-standard values such as `yes`, `on`, and `off`.
 
 ## Development
 

@@ -1,5 +1,7 @@
 # TODO Backlog
 
+- JWKS fallback to a static key when the endpoint is unavailable requires a separate design (fallback transition, return to JWKS, and logging).
+
 This backlog tracks work intentionally left outside the completed foundation updates. Do not interpret deferred items as implemented defaults.
 
 ## Deferred Decisions

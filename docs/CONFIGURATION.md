@@ -6,20 +6,20 @@ Source of truth: `config/config.go` (Config types) and `config/load.go` (`Load` 
 
 ## Environment Variables
 
-There are 21 fixed environment-variable names and seven alias-templated DB names. `SERVICE_NAME` and `APP_ENV` are required by `Config.Validate`; an empty variable uses the default shown. Invalid integer/boolean strings also use the default. Comma-separated values are trimmed around each item.
+There are 21 fixed environment-variable names and seven alias-templated DB names. `SERVICE_NAME` and `APP_ENV` are required by `Config.Validate`; an empty variable uses the default shown. A non-empty invalid integer or boolean value makes `config.Load` return one error with one line per invalid variable and its expected format; values are not silently replaced with defaults. Secret-like values are redacted using the same key-name rules as the startup `effective_config` record. Boolean values are exactly those accepted by `strconv.ParseBool`: `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`, `F`, `FALSE`, `false`, and `False`. Comma-separated values are trimmed around each item.
 
 | Area | Name | Default | Required? | Purpose | Example |
 |---|---|---|---|---|---|
 | App | `SERVICE_NAME` | empty | Yes | Service identity, logger field, and DB default lock key. | `SERVICE_NAME=catalog-api` |
 | App | `APP_ENV` | empty | Yes | One of `local`, `dev`, `sit`, `uat`, `prod`; `local` selects console logs. | `APP_ENV=local` |
 | App | `LOG_LEVEL` | `info` | No | Logger threshold. | `LOG_LEVEL=debug` |
-| gRPC | `GRPC_PORT` | `50051` | No | gRPC listen port. | `GRPC_PORT=50051` |
-| HTTP | `HTTP_PORT` | `8080` | No | Gateway listen port. | `HTTP_PORT=8080` |
+| gRPC | `GRPC_PORT` | `50051` | No | gRPC listen port; must be 1–65535 and differ from `HTTP_PORT`. | `GRPC_PORT=50051` |
+| HTTP | `HTTP_PORT` | `8080` | No | Gateway listen port; must be 1–65535 and differ from `GRPC_PORT`. | `HTTP_PORT=8080` |
 | HTTP | `HTTP_CORS_ALLOWED_ORIGINS` | empty | No | Comma-separated exact origins; empty disables CORS. | `HTTP_CORS_ALLOWED_ORIGINS=https://app.example` |
-| HTTP/security | `HTTP_PPROF_ENABLED` | `false` | No | Enables pprof outside production; prod/production startup is rejected. | `HTTP_PPROF_ENABLED=true` |
+| HTTP/security | `HTTP_PPROF_ENABLED` | `false` | No | Boolean accepted by `strconv.ParseBool`; enables pprof outside production; prod/production startup is rejected. | `HTTP_PPROF_ENABLED=true` |
 | Tracing | `APM_ENDPOINT` | empty | No | Enables OTLP gRPC export when nonempty. | `APM_ENDPOINT=collector.internal:4317` |
-| Metrics | `METRICS_ENABLED` | `false` | No | Enables metric recording and `/metrics`. | `METRICS_ENABLED=true` |
-| Diagnostics | `DIAG_ENABLED` | `true` | No | Starts periodic runtime snapshots; false disables the watcher. | `DIAG_ENABLED=false` |
+| Metrics | `METRICS_ENABLED` | `false` | No | Boolean accepted by `strconv.ParseBool`; enables metric recording and `/metrics`. | `METRICS_ENABLED=true` |
+| Diagnostics | `DIAG_ENABLED` | `true` | No | Boolean accepted by `strconv.ParseBool`; starts periodic runtime snapshots; false disables the watcher. | `DIAG_ENABLED=false` |
 | Signature | `AUTH_SIGNATURE_MASTER_KEY` | empty | No | Nonempty value enables HTTP signature validation. Secret value. | `AUTH_SIGNATURE_MASTER_KEY=<secret>` |
 | Redis | `REDIS_ADDRESS` | empty | No | Presence enables Redis; value is the server address. | `REDIS_ADDRESS=127.0.0.1:6379` |
 | Redis | `REDIS_PASSWORD` | empty | No | Redis password when authentication is enabled. Secret value. | `REDIS_PASSWORD=<secret>` |
@@ -33,13 +33,13 @@ There are 21 fixed environment-variable names and seven alias-templated DB names
 | Database | `DB_LIST` | empty | No | Comma-separated aliases; each alias activates its DB config. | `DB_LIST=primary,archive` |
 | Database | `DB_<ALIAS>_DRIVER` | empty | For every listed alias | Must be `sqlserver` or `mysql`. | `DB_PRIMARY_DRIVER=mysql` |
 | Database | `DB_<ALIAS>_HOST` | empty | For every listed alias | Host used to compose the driver DSN. | `DB_PRIMARY_HOST=127.0.0.1` |
-| Database | `DB_<ALIAS>_PORT` | `0` | For every listed alias | Positive port used to compose the driver DSN. | `DB_PRIMARY_PORT=3306` |
+| Database | `DB_<ALIAS>_PORT` | `0` | For every listed alias | Must be 1–65535 when a database alias is configured; used to compose the driver DSN. | `DB_PRIMARY_PORT=3306` |
 | Database | `DB_<ALIAS>_NAME` | empty | For every listed alias | Database name used to compose the driver DSN. | `DB_PRIMARY_NAME=catalog` |
 | Database | `DB_<ALIAS>_USER` | empty | For every listed alias | Database user used to compose the driver DSN. | `DB_PRIMARY_USER=app` |
 | Database | `DB_<ALIAS>_PASSWORD` | empty | No | Database password. Secret value. | `DB_PRIMARY_PASSWORD=<secret>` |
 | Database | `DB_<ALIAS>_PARAMS` | empty | No | Driver query parameters. | `DB_PRIMARY_PARAMS=parseTime=true` |
 
-Each listed DB alias requires driver, host, positive port, name, and user; the loader composes the DSN. There is no active `DB_<ALIAS>_DSN` environment input. A service that constructs a `DBConfig` directly may set its `DSN` field. Alias text is uppercased for env names and lowercased in the Config map.
+Each listed DB alias requires driver, host, port 1–65535, name, and user; the loader composes the DSN. `GRPC_PORT` and `HTTP_PORT` must also differ. There is no active `DB_<ALIAS>_DSN` environment input. A service that constructs a `DBConfig` directly may set its `DSN` field. Alias text is uppercased for env names and lowercased in the Config map.
 
 ## Code Configuration Fields
 
@@ -122,8 +122,8 @@ Defaults below are assigned by `config.Load` / database alias loading. A service
 | `Auth.Signature.MaxTimeDrift` | `time.Duration` | `5m` | Allowed timestamp drift. |
 | `Auth.InternalJWT` | `InternalJWTConfig` | Values below | Internal JWT verification settings. |
 | `Auth.InternalJWT.Enabled` | `bool` | `false` | Enable internal JWT verification. |
-| `Auth.InternalJWT.PublicKey` | `string` | empty | RSA public key; required when enabled. |
-| `Auth.InternalJWT.JWKSEndpoint` | `string` | empty | JWKS endpoint used by verifier configuration. |
+| `Auth.InternalJWT.PublicKey` | `string` | empty | RSA public key; when enabled, choose this or `JWKSEndpoint`, not both. |
+| `Auth.InternalJWT.JWKSEndpoint` | `string` | empty | JWKS endpoint for automatic key rotation; when enabled, choose this or `PublicKey`, not both. Must use HTTPS except in `APP_ENV=local`. |
 | `Auth.InternalJWT.JWKSRefreshInterval` | `time.Duration` | `1h` | JWKS refresh interval. |
 | `Auth.InternalJWT.Issuer` | `string` | empty | Expected issuer. |
 | `Auth.InternalJWT.Audience` | `string` | empty | Expected audience. |
@@ -151,6 +151,8 @@ Defaults below are assigned by `config.Load` / database alias loading. A service
 | `IgnoredEnvVars` | `[]string` | Sorted detected removed names | Loader-derived list of present removed env names; matching variables are ignored and logged once at startup. |
 
 Environment loading reads 21 fixed names plus seven database alias templates.
+
+When Internal JWT is enabled, choose exactly one key source: `PublicKey` for a static key rotated through deployment, or `JWKSEndpoint` for automatic rotation. Setting both or neither is rejected during validation/startup.
 
 ## Removed Environment Variable Names
 
