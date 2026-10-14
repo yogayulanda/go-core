@@ -33,7 +33,7 @@ Pool sizing and required/optional status are code fields. PostgreSQL and old poo
 - `KAFKA_USERNAME`, `KAFKA_PASSWORD`, `KAFKA_SASL_MECHANISM` (`PLAIN`, `SCRAM-SHA-256`, `SCRAM-SHA-512`)
 - `KAFKA_JKS_FILE`, `KAFKA_JKS_PASSWORD`
 
-`KAFKA_JKS_FILE` autodetects JKS and PEM trust material. Credentials and TLS are shared by producer, consumer, and readiness probes. The office's selected mechanism is still an operations question; all approved mechanisms are supported.
+`KAFKA_JKS_FILE` autodetects JKS and PEM trust material. Credentials and TLS are shared by producer, consumer, and readiness probes. The deployment's selected mechanism is still an operations question; all supported mechanisms are available.
 
 ## Observability And Diagnostics
 

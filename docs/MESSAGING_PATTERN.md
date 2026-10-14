@@ -52,7 +52,7 @@ Matching test fixtures are maintained at `messaging/outbox/testdata/schema_sqlse
 
 Use this document as the canonical messaging and outbox consumption pattern for services using `go-core`.
 
-Kafka authentication is configured with `KAFKA_USERNAME`, `KAFKA_PASSWORD`, and `KAFKA_SASL_MECHANISM` (`PLAIN`, `SCRAM-SHA-256`, or `SCRAM-SHA-512`). `KAFKA_JKS_FILE` accepts either a JKS truststore/keystore or a PEM bundle; `KAFKA_JKS_PASSWORD` is used for JKS files. Producer, consumer, and readiness checks share the same configuration. The office's selected SASL mechanism remains an operations question; all three mechanisms are supported.
+Kafka authentication is configured with `KAFKA_USERNAME`, `KAFKA_PASSWORD`, and `KAFKA_SASL_MECHANISM` (`PLAIN`, `SCRAM-SHA-256`, or `SCRAM-SHA-512`). `KAFKA_JKS_FILE` accepts either a JKS truststore/keystore or a PEM bundle; `KAFKA_JKS_PASSWORD` is used for JKS files. Producer, consumer, and readiness checks share the same configuration. The deployment's selected SASL mechanism remains an operations question; all three mechanisms are supported.
 
 ## When To Use Direct Publisher
 

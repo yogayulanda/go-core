@@ -1,15 +1,15 @@
 # Migration Guide
 
-This file distinguishes the public tagged v1 line from the prepared internal foundation refresh. The internal refresh described below is **not released or tagged**; `D-PATH` remains open. Apply it only when the internal module path and adoption window are approved.
+This guide covers migration from the public v1.0.x line to v1.1.0.
 
 ## Public v1.0.x History
 
 - `v1.0.0` established the public stable baseline.
 - `v1.0.1` was an OSS-readiness patch; it intended no runtime or public Go API changes.
 
-## Prepared Internal 1.0.0 Refresh
+## v1.1.0 Changes
 
-The following changes are consumer-visible breaking changes. Plan them together with service migrations; do not infer that a released internal module/tag exists.
+The following changes are consumer-visible. Plan them together with consuming-service migrations.
 
 ### Configuration and databases
 
@@ -34,7 +34,7 @@ The following changes are consumer-visible breaking changes. Plan them together 
 - HTTP retries are disabled by default; opt in per client with `httpclient.WithRetry`.
 - Received HTTP responses, including 5xx, return `(response, nil)`. Transport failures return `*httpclient.TransportError` with phase and kind.
 - Request ID, user ID, and registered labels are forwarded by HTTP only with `WithInternalPropagation()`; they are never forwarded by default. Body logging requires `WithBodyLogging(masker)` and has no default-on mode.
-- `grpcclient.NewClient` adds request identity propagation, OTel stats, per-call logging/metrics, keepalive, and a 30-second deadline only when the context has no deadline. Service-config retries are disabled. Configure transport credentials explicitly for TLS; plaintext matches the default server configuration.
+- `grpcclient.NewClient` adds request identity propagation, OTel stats, call logging, keepalive, and a 30-second deadline only when the context has no deadline. Metrics require `grpcclient.WithMetricsEnabled(true)`; service-config retries are disabled. Configure transport credentials explicitly for TLS; plaintext matches the default server configuration.
 
 ### Kafka, outbox, and audit events
 
@@ -60,7 +60,7 @@ The following changes are consumer-visible breaking changes. Plan them together 
 
 ## Still Blocked / Deferred
 
-- `D-PATH`: internal module path; no tag was created.
 - `Q-SIG`: compatibility confirmation is deferred but is not a release blocker.
-- Go source directive remains `1.24.3`; office build image is `1.24.13`; next upgrade target is `1.26.x`.
-- SQL Server/MySQL outbox integration tests require Docker and were not run in the implementation environment (S8).
+- The Go source directive remains `1.24.3`; the current build image is `1.24.13`; next upgrade target is `1.26.x`.
+- Downstream forks may adjust the module path before adoption.
+- SQL Server/MySQL outbox integration tests require disposable databases and remain unverified against real database instances.

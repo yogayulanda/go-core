@@ -50,7 +50,7 @@ func TestRequestIDInterceptorValidatesIDAndRestoresIncomingIdentity(t *testing.T
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
 		"x-request-id", "../../etc",
 		"x-user-id", "user-7",
-		"x-label-client_app", "sitepat",
+		"x-label-client_app", "app-a",
 		"x-label-unregistered", "ignored",
 		"x-core-client-ip", "1.1.1.1",
 		"x-core-user-agent", "client/1.2",
@@ -73,7 +73,7 @@ func TestRequestIDInterceptorValidatesIDAndRestoresIncomingIdentity(t *testing.T
 	if got := observability.GetUserID(handlerContext); got != "user-7" {
 		t.Fatalf("unexpected restored user ID: %q", got)
 	}
-	if got := observability.Labels(handlerContext)["client_app"]; got != "sitepat" {
+	if got := observability.Labels(handlerContext)["client_app"]; got != "app-a" {
 		t.Fatalf("unexpected restored label: %q", got)
 	}
 	if got := observability.GetClientIP(handlerContext); got != "1.1.1.1" {

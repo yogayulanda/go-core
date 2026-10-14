@@ -320,7 +320,7 @@ BASE_URL=https://staging.example.com TARGET_PATH=/health make load-steady
 
 Use `docs/PRODUCTION_SIGNOFF.md` and `docs/RELEASE_EVIDENCE_TEMPLATE.md` when preparing a production service release that consumes this module.
 
-Open release work remains: internal module path (`D-PATH`) and human-controlled release/tagging. `Q-SIG` confirmation is deferred but is not a release blocker. GC-23 uses OpenTelemetry OTLP to Elastic APM Server; GC-24 metrics are opt-in via `METRICS_ENABLED` (default false). The source directive stays Go 1.24.3; the office image uses 1.24.13 and the next upgrade target is 1.26.x.
+Downstream forks may adjust the module path before adoption. `Q-SIG` confirmation is deferred but is not a release blocker. GC-23 uses OpenTelemetry OTLP to Elastic APM Server; GC-24 metrics are opt-in via `METRICS_ENABLED` (default false). The source directive stays Go 1.24.3; the current build image uses Go 1.24.13 and the next upgrade target is 1.26.x.
 
 Set build metadata with `-ldflags` when building a service that exposes `/version`:
 

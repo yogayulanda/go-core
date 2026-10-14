@@ -1,6 +1,6 @@
 # Technical Guide
 
-Panduan ini menjelaskan API yang tersedia pada source saat ini. Integrasi internal 1.0.0 yang dijelaskan di sini belum ditag; lihat `MIGRATION.md` dan catatan blockers.
+Panduan ini menjelaskan API yang tersedia pada source v1.1.0. Untuk perubahan dari v1.0.x, lihat `MIGRATION.md`.
 
 ## Configuration And Startup
 
@@ -70,4 +70,4 @@ Consumer concurrency is keyed by partition: a partition has one FIFO worker, and
 
 Tracing is OpenTelemetry OTLP to Elastic APM Server via `APM_ENDPOINT`; no Elastic APM agent is used and logs do not include `transaction.id`. Metrics are disabled by default; set `METRICS_ENABLED=true` to record metrics and register `/metrics`. `app_transaction_total` is removed.
 
-Still out of scope: `D-PATH` internal module path and human-controlled tag/release. `Q-SIG` confirmation is deferred but is not a release blocker. Keep `go 1.24.3` in `go.mod`; the office image uses Go 1.24.13 and the next upgrade target is Go 1.26.x.
+Downstream forks may adjust the module path before adoption. `Q-SIG` confirmation is deferred but is not a release blocker. Keep `go 1.24.3` in `go.mod`; the current build image uses Go 1.24.13 and the next upgrade target is Go 1.26.x.

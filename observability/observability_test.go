@@ -52,11 +52,11 @@ func TestFieldBagSetAndRestoreIncomingIdentity(t *testing.T) {
 	if err := RegisterPropagatedLabel("client_app"); err != nil {
 		t.Fatalf("register propagated label: %v", err)
 	}
-	RestoreIncomingIdentity(ctx, "user-1", map[string]string{"client_app": "sitepat"})
+	RestoreIncomingIdentity(ctx, "user-1", map[string]string{"client_app": "app-a"})
 	if got := GetUserID(ctx); got != "user-1" {
 		t.Fatalf("unexpected user id: %q", got)
 	}
-	if got := Labels(ctx)["client_app"]; got != "sitepat" {
+	if got := Labels(ctx)["client_app"]; got != "app-a" {
 		t.Fatalf("unexpected propagated label: %q", got)
 	}
 	if err := SetLabel(ctx, "password", "secret"); err != nil {
@@ -64,7 +64,7 @@ func TestFieldBagSetAndRestoreIncomingIdentity(t *testing.T) {
 	}
 	labels := Labels(ctx)
 	labels["client_app"] = "mutated-copy"
-	if got := Labels(ctx)["client_app"]; got != "sitepat" {
+	if got := Labels(ctx)["client_app"]; got != "app-a" {
 		t.Fatalf("Labels must return a copy; got %q", got)
 	}
 }

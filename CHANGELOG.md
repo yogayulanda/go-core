@@ -7,19 +7,16 @@ This changelog complements:
 - `MIGRATION.md` for consumer-visible upgrade guidance
 - `docs/RELEASING.md` for the release process
 
-## [1.1.0] - Unreleased
+## [Unreleased]
 
-### Added
-- No public 1.1.0 release changes have been selected. Internal foundation work is tracked below and must not be treated as a published tag.
+## [1.1.0] - 2026-10-14
 
-## [Internal 1.0.0] - Prepared 2026-10-14; not tagged
-
-This section records the internal foundation refresh completed in this workspace. It is not a tag or public release. `D-PATH` remains open; do not consume this state as a published internal module until the path and release gates are approved.
+This release records the completed foundation refresh and its consumer-visible compatibility changes.
 
 ### Added
 - Registry-backed response codes, `CORE-1005` for oversized HTTP bodies, and a consistent HTTP success/error envelope.
 - Configurable gateway timeouts, CORS allowlists, request identity capture/forwarding, gRPC health, graceful draining, and effective-config redaction.
-- HTTP transport errors with before/after-send classification; an opt-in-retry HTTP client; and a new gRPC client with identity propagation, default deadline, metrics, logging, OTel, and retries disabled.
+- HTTP transport errors with before/after-send classification; an opt-in-retry HTTP client; and a new gRPC client with identity propagation, default deadline, opt-in metrics, logging, OTel, and retries disabled.
 - Kafka PLAIN/SCRAM and JKS/PEM TLS configuration, per-partition ordered consumers, header-preserving DLQ messages, per-key leased outbox delivery, and CloudEvents audit publication.
 - Bounded route-template metric labels, optional runtime diagnostic snapshots, and the `coretest` test-helper package.
 
@@ -36,16 +33,15 @@ This section records the internal foundation refresh completed in this workspace
 - Logger and database constructors now use functional options. `logger.NewWithOptions` and `database.NewWithLogConfig` were removed.
 - Shutdown now drains before graceful server stop; startup logs the effective config with secret values redacted. `DIAG_ENABLED` adds bounded diagnostic snapshots by default.
 
-The Go module path is unchanged in this prepared state. A consuming internal release still requires `D-PATH` approval and a separate human-controlled release/tag action.
+The module path is unchanged in this release. Downstream forks may adjust it to match their import location before adoption.
 
-### Known Gaps Before Release
+### Known Gaps
 - Outbox belum diverifikasi terhadap database nyata.
 - `GC-23` is resolved as OpenTelemetry OTLP to Elastic APM Server; no APM agent or `transaction.id` field is used.
 - `GC-24` is resolved as `METRICS_ENABLED=false` by default; metrics and `/metrics` are opt-in, and `app_transaction_total` is removed.
-- `D-PATH` (internal module path) remains open; no tag was created.
-- `Q-SIG` confirmation of the existing signature scheme remains deferred.
-- The source directive remains Go 1.24.3; the office build image is Go 1.24.13. Go 1.26.x is the next planned toolchain upgrade.
-- SQL Server/MySQL outbox integration tests were authored with the `integration` build tag but not run here because Docker was unavailable (S8).
+- `Q-SIG` confirmation of the existing signature scheme remains deferred and is not a release blocker.
+- The source directive remains Go 1.24.3; the current build image uses Go 1.24.13. Go 1.26.x is the next planned toolchain upgrade.
+- SQL Server/MySQL outbox integration tests use the `integration` build tag; database subtests were skipped because Docker/database DSNs were unavailable in the validation environment.
 
 ## [1.0.1] - 2026-05-25
 

@@ -95,6 +95,6 @@ These findings are evaluated against Go 1.24.13. The “fixed Go” column is th
 ## Image and Upgrade Plan
 
 - Keep the source directive at `go 1.24.3`.
-- Use Go 1.24.13 for the current office image; it is the agreed final patch release for the Go 1.24 line.
+- Use Go 1.24.13 for the current build image; it is the final patch release for the Go 1.24 line.
 - Plan the next toolchain/image upgrade to Go 1.26.x, not Go 1.27. Re-evaluate the deferred module upgrades against that image before upgrading dependencies.
 - No major dependency upgrades or fixes requiring Go 1.25+ were included in this remediation.
