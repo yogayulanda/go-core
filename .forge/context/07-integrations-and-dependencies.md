@@ -18,7 +18,9 @@
 - Infra dependencies are opt-in via configuration profiles: Redis, Memcached, Kafka, tracing export, JWT verification, HTTP signatures, and startup migration.
 - `app.NewKafkaPublisher(...)` and `app.NewKafkaConsumer(...)` wire default logger and metrics options, but topic choice, retry/DLQ policy, concurrency, and worker ownership remain service decisions.
 - The outbound HTTP client and resilience helpers are intended for bounded timeout, retry, and circuit-breaker behavior around external services.
-- Kafka configuration supports SASL Plain authentication and JKS certificates according to `docs/MESSAGING_PATTERN.md` and `docs/CONFIGURATION_PROFILES.md`.
+- Kafka authentication supports PLAIN, SCRAM-SHA-256, and SCRAM-SHA-512. Trust material accepts JKS or PEM through `KAFKA_JKS_FILE`; the JKS reader is isolated in `messaging/internal/kafkatls` and attributed in `NOTICE.txt`.
+- Producer, consumer, HTTP readiness, and gRPC health checks use the shared Kafka security configuration. The deployment's selected SASL mechanism remains an operational question.
+- Residual dependency and standard-library advisories, including fixed versions and toolchain requirements, are tracked in `docs/SECURITY_ADVISORIES.md`.
 
 ## Assumptions
 - None.

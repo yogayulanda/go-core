@@ -1,6 +1,6 @@
 # Proposed Context Patch: 09 Errors And Resilience
 
-Status: proposal only; curated context remains unchanged.
+Status: promoted on 2026-10-14 to `.forge/context/09-errors-and-resilience.md`.
 
 ## Replace stale confirmed facts
 - The current error API is registry-backed with open codes and built-ins under `CORE-*`; application helpers are `errors.New`, `Wrap`, and `Validation`. Prior builder/category/domain APIs are absent.

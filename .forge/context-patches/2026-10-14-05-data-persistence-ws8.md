@@ -1,6 +1,6 @@
 # Proposed Context Patch: 05 Data And Persistence
 
-Status: proposal only; curated context remains unchanged.
+Status: promoted on 2026-10-14 to `.forge/context/05-data-and-persistence.md`.
 
 ## Replace stale confirmed facts
 - Supported runtime SQL drivers are SQL Server and MySQL only. PostgreSQL support is not part of this release state.

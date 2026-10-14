@@ -14,11 +14,13 @@
 - Consuming services own their protobuf, HTTP route, and business payload schemas; `go-core` owns reusable transport behavior and technical envelopes.
 
 ## Confirmed Facts
-- gRPC server construction is provided by `server/grpc.New(...)`, which installs recovery, request ID, auth, logging, and metrics unary interceptors plus OpenTelemetry gRPC stats handling.
-- The HTTP gateway created by `server/gateway.New(...)` always registers `/health`, `/ready`, `/version`, and `/metrics`, and conditionally registers pprof endpoints when `HTTP.PprofEnabled` is true.
-- Gateway responses use a custom error handler and success-envelope middleware. Error responses use `errors.ErrorResponse` with `success`, `code`, `message`, optional `user_message`, optional `trace_id`, optional `transaction_id`, `timestamp`, and optional `details`; success responses use an envelope with `success`, optional `trace_id`, optional `transaction_id`, `timestamp`, and `data`.
-- `errors.AppError` is the canonical application-visible error contract; stable codes include `INVALID_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `SESSION_EXPIRED`, `SERVICE_UNAVAILABLE`, and `INTERNAL_ERROR`.
-- Messaging contracts use `messaging.Message` with `Topic`, `Key`, `Payload`, and `Headers`; the documented payload envelope should include `event_id`, `event_type`, `event_version`, and `occurred_at`.
+- gRPC server construction is provided by `server/grpc.New(...)`, which installs recovery, request ID, auth, logging, and metrics interceptors plus OpenTelemetry gRPC stats handling. Metric recording is controlled by `METRICS_ENABLED` and defaults off.
+- The HTTP gateway created by `server/gateway.New(...)` always registers `/health`, `/ready`, `/version`, and `/metrics`; `/metrics` returns 404 when `METRICS_ENABLED` is false. Pprof endpoints are conditional on `HTTP.PprofEnabled` and forbidden in production.
+- Gateway success envelopes contain `status`, `response_code`, `message`, `request_id`, `timestamp`, and `data`; validation failures may include `details`. Application errors use the open `errors.Def` registry and `errors.AppError`.
+- `messaging.Message` includes topic, key, payload, headers, and optional `EventID`. CloudEvent attributes can be retrieved from context with `messaging.CloudEventsFromContext`.
+- HTTP transport failures use `httpclient.TransportError` with phase and kind. Received HTTP statuses, including 5xx, return a response with nil error. Retries are opt-in; identity propagation requires caller-supplied `WithInternalPropagation()`.
+- `grpcclient.NewClient` adds a 30-second default deadline only when the caller context has none, plus identity propagation, OpenTelemetry stats, call logs, and keepalive. Service-config retries and metrics are disabled by default; metrics require `grpcclient.WithMetricsEnabled(true)`.
+- CloudEvents audit outbox publication requires a UUID `ce_id`, `ce_subject`, and `ce_sequence`.
 
 ## Assumptions
 - None.
