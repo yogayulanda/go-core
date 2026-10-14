@@ -269,7 +269,7 @@ Kafka clients are not started merely by setting broker configuration: create the
 
 ### Outbox And Audit Events
 
-The outbox stores an event in the same SQL transaction as the business change. A service-owned worker publishes committed rows later, so a process crash does not silently lose the event. Rows are ordered by key: an older non-`SENT` row blocks later rows for that key. After the configured maximum attempts, the row becomes `DEAD` and continues to block that key until an operator resolves it. Consumers should use `event_id`/CloudEvents `ce_id` as an idempotency key and persist deduplication with their own side effect.
+The outbox stores an event in the same SQL transaction as the business change. A service-owned worker publishes committed rows later, so a process crash does not silently lose the event. Rows are ordered by key: an older non-`SENT` row blocks later rows for that key. After the configured maximum attempts, the row becomes `DEAD` and continues to block that key until an operator resolves it. For generic messages, put the consumer's idempotency key in your payload or headers; the SQL `event_id` is stored by the outbox but is not automatically exposed as a standard Kafka header. For audit events, consumers can use CloudEvents `ce_id` and persist deduplication with their side effect.
 
 **Excerpt, inside a transaction:**
 
@@ -281,6 +281,22 @@ if err := publisher.PublishTx(ctx, tx, messaging.Message{Topic: "orders", Key: k
 ```
 
 `PublishAudit` writes CloudEvents 1.0 headers: `ce_specversion`, `ce_id`, `ce_type`, `ce_source`, `ce_time`, `ce_subject`, and `ce_sequence`. It requires a UUID `ce_id`; `ce_subject` is the Kafka key. Audit logging includes metadata, not event payload. `app.New` does not start the worker. See [Messaging Pattern](docs/MESSAGING_PATTERN.md).
+
+**Excerpt, add an audit event to the caller's transaction:**
+
+```go
+err := publisher.PublishAudit(ctx, tx, outbox.AuditEvent{
+	Topic: "audit",
+	SpecVersion: "1.0",
+	ID: "01234567-89ab-4cde-8fab-0123456789ab",
+	Type: "com.example.order.created.v1",
+	Source: "/catalog",
+	Time: time.Now().UTC(),
+	Subject: "order-123",
+	Sequence: "1",
+	Data: payload,
+})
+```
 
 Start the worker explicitly after creating it; stop it as part of service shutdown. Do not start an outbox worker when the service has not configured a database and publisher. Omitting worker creation disables delivery; it does not delete rows from the outbox.
 
