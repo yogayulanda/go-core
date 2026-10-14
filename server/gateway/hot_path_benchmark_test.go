@@ -40,6 +40,31 @@ func BenchmarkGatewayHTTPEndToEnd(b *testing.B) {
 	}
 }
 
+func BenchmarkGatewayRawHTTPEndToEnd(b *testing.B) {
+	application := newGatewayBenchmarkApp(b)
+	gatewayServer, err := New(application, func(_ context.Context, mux *runtime.ServeMux) error {
+		return mux.HandlePath(http.MethodGet, "/benchmark-raw", Raw(func(w http.ResponseWriter, _ *http.Request, _ map[string]string) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/benchmark-raw", nil)
+	request.Header.Set("X-Request-ID", "benchmark-raw-request-1")
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		recorder := httptest.NewRecorder()
+		gatewayServer.server.Handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			b.Fatalf("raw gateway returned status %d", recorder.Code)
+		}
+	}
+}
+
 func newGatewayBenchmarkApp(b *testing.B) *app.App {
 	b.Helper()
 	sink, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)

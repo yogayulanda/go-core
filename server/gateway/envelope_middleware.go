@@ -1,11 +1,14 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
 	coreerrors "github.com/yogayulanda/go-core/errors"
+	"github.com/yogayulanda/go-core/logger"
+	"github.com/yogayulanda/go-core/observability"
 	"github.com/yogayulanda/go-core/response"
 )
 
@@ -43,13 +46,47 @@ func (r *responseBuffer) Write(b []byte) (int, error) {
 }
 
 func withSuccessEnvelope(next http.Handler) http.Handler {
+	return withSuccessEnvelopeAndLogger(next, nil)
+}
+
+func withSuccessEnvelopeAndLogger(next http.Handler, log logger.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isOperationalPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
+		raw := &rawResponseMarker{}
+		r = r.WithContext(context.WithValue(r.Context(), rawResponseMarkerKey{}, raw))
 		buffered := &responseBuffer{ResponseWriter: w, status: http.StatusOK}
+		startedAt := time.Now()
 		next.ServeHTTP(buffered, r)
+		if raw.enabled {
+			w.WriteHeader(buffered.status)
+			_, _ = w.Write(buffered.body)
+			if log != nil {
+				class := "SUCCESS"
+				if buffered.status >= http.StatusInternalServerError {
+					class = "ERROR"
+				} else if buffered.status >= http.StatusBadRequest {
+					class = "FAILED"
+				}
+				responseCode := response.CodeFromHTTPHeader(buffered.Header())
+				if responseCode == "" {
+					responseCode = "CORE-0000"
+				}
+				log.LogService(r.Context(), logger.ServiceLog{
+					LogType:           "access",
+					Class:             class,
+					Route:             r.URL.Path,
+					Method:            r.Method,
+					StatusCode:        buffered.status,
+					ResponseCode:      responseCode,
+					DurationMs:        time.Since(startedAt).Milliseconds(),
+					RequestIDReplaced: observability.RequestIDReplaced(r.Context()),
+				})
+			}
+			return
+		}
 
 		responseCode := response.CodeFromHTTPHeader(buffered.Header())
 		buffered.Header().Del("X-Response-Code")
