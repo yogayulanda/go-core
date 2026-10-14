@@ -43,7 +43,7 @@ Each listed DB alias requires driver, host, positive port, name, and user; the l
 
 ## Code Configuration Fields
 
-The table lists all **100 fields** declared in `Config` and its nested configuration types: 84 leaf settings, 14 top-level group/derived fields, and the two nested fields in `AuthConfig`. Group rows show their Go type and point to the child settings below them.
+The table lists **100 declared fields** across `Config` and its nested configuration structs. Group rows show their Go type and point to the child settings below them.
 
 Defaults below are assigned by `config.Load` / database alias loading. A service may override them in code before validation and app construction.
 
@@ -150,7 +150,7 @@ Defaults below are assigned by `config.Load` / database alias loading. A service
 | `Kafka.JksPassword` | `string` | `KAFKA_JKS_PASSWORD` or empty | JKS password. |
 | `IgnoredEnvVars` | `[]string` | Sorted detected removed names | Loader-derived list of present removed env names; matching variables are ignored and logged once at startup. |
 
-The table contains 86 leaf settings and the 14 aggregate/derived `Config` fields are listed above it. Environment loading reads 21 fixed names plus the seven database alias templates.
+Environment loading reads 21 fixed names plus seven database alias templates.
 
 ## Removed Environment Variable Names
 

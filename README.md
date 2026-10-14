@@ -2,6 +2,15 @@
 
 `go-core` is a runtime foundation for Go microservices. It provides a gRPC server, an HTTP/gRPC gateway, configuration, logging, error mapping, messaging, databases, and observability. It handles common infrastructure work so each service does not need to rebuild it. It does not contain business entities, workflows, or product rules; those stay in your service.
 
+## Core Concepts In 2 Minutes
+
+- **Envelope:** a JSON wrapper around a successful API response. It gives clients one predictable place for status, code, message, request ID, timestamp, and data.
+- **Response code:** a stable string such as `CORE-0000` or `CORE-1000`. The registry maps it to an HTTP/gRPC status and a safe message.
+- **Request ID:** an identifier for one request. Logs and downstream calls can use it to connect related work.
+- **Field bag:** request-scoped storage for the request ID, user ID, client IP, and registered labels. The gateway and gRPC interceptor create it for incoming requests.
+- **Outbox:** a database record written in the same transaction as a business change. A worker publishes it later so a process stop does not silently lose the event.
+- **Raw handler:** a route that opts out of the success envelope. Use it only when your handler must own the complete HTTP response.
+
 Module: `github.com/yogayulanda/go-core`
 
 ## Requirements
@@ -50,7 +59,7 @@ The generated request ID changes on each call. For the complete service, use the
 
 ## Request Flow
 
-These are the real construction orders in `server/gateway.New` and `server/grpc.New`. HTTP enters at the left; gRPC enters at the left. The gRPC OpenTelemetry stats handler runs alongside the unary chain.
+These are the real construction orders in `server/gateway.New` and `server/grpc.New`. Follow each chain from top to bottom: HTTP requests use the HTTP chain, while RPC calls use the gRPC unary chain. The gRPC OpenTelemetry stats handler runs alongside the unary chain.
 
 ```text
 HTTP request
@@ -84,7 +93,16 @@ The gateway envelope is inside CORS and tracing. The outer identity, recovery, b
 
 ### Response Envelope
 
-A response envelope is a standard JSON object around a successful API payload. It gives clients consistent status, error code, message, request ID, and timestamp fields. The gateway wraps 2xx responses; a registered response code supplies the envelope class/message and HTTP status. Non-2xx status/body pass through, but response-code metadata headers are removed. `/health`, `/ready`, `/version`, `/metrics`, and `/debug/pprof*` bypass the envelope.
+| | Guidance |
+|---|---|
+| What | A standard JSON wrapper around successful API data. |
+| When to use | Normal service APIs that need consistent response metadata. |
+| How to turn on | Default for non-operational gateway routes. |
+| How to turn off | Wrap only the selected handler with `gateway.Raw` or `gateway.RawHTTP`. |
+
+A response envelope is a standard JSON object around a successful API payload. It gives clients consistent status, error code, message, request ID, and timestamp fields. The gateway wraps 2xx responses; a registered response code supplies the envelope class/message and HTTP status.
+
+Non-2xx status/body pass through, but response-code metadata headers are removed. `/health`, `/ready`, `/version`, `/metrics`, and `/debug/pprof*` bypass the envelope.
 
 ```json
 {"status":"SUCCESS","response_code":"CORE-0000","message":"success","request_id":"...","timestamp":"...","data":{"item":"value"}}
@@ -101,6 +119,13 @@ if err := response.SetCode(ctx, "CORE-0000"); err != nil {
 Use `gateway.Raw` or `gateway.RawHTTP` only when a route must return its own response contract. Normal API routes are enveloped by default. See [Error Handling](docs/ERROR_HANDLING.md).
 
 ### Response Code Registry
+
+| | Guidance |
+|---|---|
+| What | A process-wide map from response codes to transport metadata. |
+| When to use | Register service-specific codes before serving requests. |
+| How to turn on | Built-ins register automatically; add custom codes with `errors.Register`. |
+| How to turn off | Built-in codes cannot be disabled; do not register unused custom codes. |
 
 The registry maps a stable code to a class, HTTP status, gRPC status, finality, retryability, and safe default message. This keeps transport mapping consistent across services.
 
@@ -130,9 +155,14 @@ err := errors.Register(errors.Def{
 
 `errors.Register` rejects duplicate or invalid definitions. An unregistered code resolves to `CORE-9000`; do not expose its internal message. Implement `errors.MessageProvider` and call `errors.SetMessageProvider` when a service needs localized/user-specific messages. See [errors.md](docs/errors.md).
 
-Built-in codes are registered during package initialization and cannot be disabled; custom codes are enabled by registering them before serving requests.
-
 ### Raw Gateway Responses
+
+| | Guidance |
+|---|---|
+| What | A per-handler opt-out from the success envelope. |
+| When to use | Transparent proxies, webhooks, or file downloads with their own response format. |
+| How to turn on | Wrap with `gateway.Raw` or `gateway.RawHTTP`. |
+| How to turn off | Remove the wrapper; the normal envelope applies. |
 
 `gateway.Raw` and `gateway.RawHTTP` opt one explicitly registered handler out of the 2xx envelope. Use them for a transparent proxy, webhook receiver, or file download when the upstream/body format must remain yours. Do not use them for ordinary APIs that should use the shared envelope. The handler owns status, headers, content type, body, and error format.
 
@@ -158,9 +188,16 @@ err := mux.HandlePath(http.MethodGet, "/download", func(w http.ResponseWriter, r
 
 ### Request ID And Identity
 
+| | Guidance |
+|---|---|
+| What | Request-scoped ID and identity values used in logs and propagation. |
+| When to use | Add trusted user IDs or registered labels to request context. |
+| How to turn on | Gateway/gRPC requests get a field bag automatically; set values with `SetUserID` and `SetLabel`. |
+| How to turn off | Omit identity values and do not opt outbound HTTP clients into propagation. |
+
 A request ID lets operators connect gateway logs, gRPC logs, and downstream calls. The gateway accepts a valid `X-Request-ID` or creates one, returns it in the response header, and stores it in the request field bag. `observability.SetUserID`, `SetLabel`, and `RegisterPropagatedLabel` set identity values in code.
 
-**Excerpt:**
+**Excerpt, for a worker or background context:**
 
 ```go
 ctx := observability.EnsureFieldBag(ctx)
@@ -173,11 +210,18 @@ _ = observability.SetLabel(ctx, "client_app", "app-a")
 
 `httpclient.WithInternalPropagation()` forwards request ID, user ID, and registered labels to HTTP destinations. It does not validate destination hosts. GC-27 records the trust boundary: HTTP propagation is caller-controlled, and Kafka identity headers are trusted based on internal network/producer controls, not per-message authentication. Forward identity only to destinations your service is authorized to trust.
 
-Propagation is off unless `WithInternalPropagation()` is supplied. Omit that option when a destination must not receive identity headers.
-
 ### Logging
 
-Logs use ECS-compatible JSON, except `APP_ENV=local`, which uses a console encoder. The `app.log_type` categories include `access`, `service`, `db`, `event`, and `transaction`. Records also carry service identity (`service.name`, `service.environment`, `service.version`); when present, request context adds `labels.request_id`, `labels.gtid`, `user.id`, `client.ip`, `user_agent.original`, and trace/span IDs. Access logs include route/method/status/response code/duration. They do not include request/response bodies or arbitrary headers.
+| | Guidance |
+|---|---|
+| What | ECS-compatible structured service, database, event, transaction, and access logs. |
+| When to use | Record operational events and errors with the shared logger. |
+| How to turn on | `app.New` creates the logger; set verbosity with `LOG_LEVEL`. |
+| How to turn off | No global off switch; raise the log level or leave optional request-start logging disabled. |
+
+Logs use ECS-compatible JSON, except `APP_ENV=local`, which uses a console encoder. The `app.log_type` categories include `access`, `service`, `db`, `event`, and `transaction`. Records also carry service identity (`service.name`, `service.environment`, `service.version`); when present, request context adds `labels.request_id`, `labels.gtid`, `user.id`, `client.ip`, `user_agent.original`, and trace/span IDs.
+
+Access logs include route/method/status/response code/duration. They do not include request/response bodies or arbitrary headers.
 
 Access class `ERROR` logs at error level; `UNKNOWN`, unregistered-code, replaced-request-ID, or slow events are warnings; ordinary access events are info. A slow request is marked when it exceeds `Log.SlowRequestThreshold`; slow database calls use `Log.SlowQueryThreshold`. Sensitive keys such as password, token, authorization, card, and account are redacted. Add service-specific sensitive keys via `Log.MaskKeys`.
 
@@ -192,9 +236,16 @@ log, err := logger.New(cfg.App.ServiceName, cfg.App.LogLevel,
 )
 ```
 
-Use `Log.MaskKeys` for additional sensitive field names. There is no global “disable logs” switch. The gRPC interceptor logs a request that reaches gRPC once at that boundary. Avoid logging the same error again at every layer. Successful direct `runtime.ServeMux.HandlePath` handlers that do not call gRPC currently have no access log; this is a known gap tracked in [the TODO backlog](docs/TODO_BACKLOG.md).
+Use `Log.MaskKeys` for additional sensitive field names. The gRPC interceptor logs a request that reaches gRPC once at that boundary. Avoid logging the same error again at every layer. Successful direct `runtime.ServeMux.HandlePath` handlers that do not call gRPC currently have no access log; this is a known gap tracked in [the TODO backlog](docs/TODO_BACKLOG.md).
 
 ### Errors
+
+| | Guidance |
+|---|---|
+| What | `AppError` carries a code, safe message, details, and optional cause. |
+| When to use | Return application failures that need stable HTTP/gRPC mapping. |
+| How to turn on | Create errors with `errors.New`, `Wrap`, or `Validation`; register custom codes at startup. |
+| How to turn off | Error mapping is part of the transport contract; return success when no error occurred. |
 
 `errors.AppError` carries a response code, safe message, optional validation details, and wrapped cause. `errors.New`, `errors.Wrap`, and `errors.Validation` create errors; the gRPC interceptor maps registered errors to gRPC status/details. Unknown internal errors are sanitized as `CORE-9000`.
 
@@ -205,6 +256,13 @@ return nil, errors.Validation("invalid input", errors.Detail{Field: "name", Reas
 ```
 
 ### HTTP Client
+
+| | Guidance |
+|---|---|
+| What | HTTP wrapper with timeout, logging, tracing, and a circuit breaker. |
+| When to use | Outbound HTTP calls that need shared transport error classification. |
+| How to turn on | Construct a client with `httpclient.NewClient` and per-client options. |
+| How to turn off | Do not use the wrapper for that call; retries/body logging remain opt-in. |
 
 The shared HTTP client adds structured logs, tracing, timeouts, and a circuit breaker. Retries are off by default; the breaker is on by default. A received HTTP response, including 5xx, is returned with a nil transport error. Connection and timeout failures return `*httpclient.TransportError` with `Phase` (`before_send` or `after_send`) and `Kind`.
 
@@ -220,15 +278,20 @@ request := client.Request()
 response, err := client.Do(ctx, request, http.MethodGet, "https://payments.internal/health")
 ```
 
-Options apply to that client/endpoint; retries should be enabled only for safe operations. `WithBodyLogging` requires a masker. Identity propagation is a separate explicit option. See [HTTP client docs](httpclient/README.md).
+Options apply to that client/endpoint; retries should be enabled only for safe operations. `WithBodyLogging` requires a masker. Identity propagation is a separate explicit option.
 
-Create a separate client with its own options for each downstream policy. To disable retries, leave out `WithRetry`; use `WithoutTracing()` only when tracing is not wanted for that client. The breaker default trips after more than five consecutive failures and waits 60 seconds before half-open.
-
-There is no dedicated breaker-off option in `httpclient`; supply `WithCircuitBreaker` to tune its behavior. `WithBodyLogging` remains off unless a masker is provided.
+The breaker default trips after more than five consecutive failures and waits 60 seconds before half-open. See [HTTP client docs](httpclient/README.md).
 
 ### gRPC Client
 
-The gRPC client adds call logging, OpenTelemetry stats, identity propagation, keepalive, and a default 30-second deadline only when the call context has no deadline. Service-config retries are disabled. Metrics are off unless `grpcclient.WithMetricsEnabled(true)` is set. TLS credentials must be provided explicitly; plaintext is the default.
+| | Guidance |
+|---|---|
+| What | Outbound gRPC connection with call logs, tracing, identity, and deadlines. |
+| When to use | Calls from a service to another gRPC service. |
+| How to turn on | Build with `grpcclient.NewClient`; supply TLS credentials when required. |
+| How to turn off | Do not create/use the client; metrics are off unless explicitly enabled. |
+
+The gRPC client adds call logging, OpenTelemetry stats, identity propagation, keepalive, and a default 30-second deadline only when the call context has no deadline. Service-config retries are disabled. TLS credentials must be provided explicitly; plaintext is the default.
 
 **Excerpt:**
 
@@ -242,7 +305,14 @@ client, err := grpcclient.NewClient("payments.internal:50051", log,
 
 ### Kafka
 
-Kafka integration is enabled when `KAFKA_BROKERS` is set. SASL supports `PLAIN`, `SCRAM-SHA-256`, and `SCRAM-SHA-512`. `KAFKA_JKS_FILE` accepts JKS or PEM trust material; the matching credentials/TLS configuration is used by publishers, consumers, and readiness checks.
+| | Guidance |
+|---|---|
+| What | Kafka publisher and consumer helpers with SASL/TLS support. |
+| When to use | Async events or partition-ordered message processing. |
+| How to turn on | Set `KAFKA_BROKERS`, then create a publisher or consumer in code. |
+| How to turn off | Leave `KAFKA_BROKERS` unset and do not create/start clients. |
+
+SASL supports `PLAIN`, `SCRAM-SHA-256`, and `SCRAM-SHA-512`. `KAFKA_JKS_FILE` accepts JKS or PEM trust material; the matching credentials/TLS configuration is used by publishers, consumers, and readiness checks.
 
 Consumer messages are processed in order within each partition. A failed offset blocks later offsets in that partition unless a successful DLQ publish permits commit. DLQ records keep original headers and add `x-dlq-reason` and `x-original-topic`. Retry and DLQ policies are explicit consumer options.
 
@@ -265,11 +335,20 @@ go func() {
 }()
 ```
 
-Kafka clients are not started merely by setting broker configuration: create the publisher/consumer in code and call `Start`. The consumer is closed by the app lifecycle; leave `KAFKA_BROKERS` unset to disable the integration. Omitting a DLQ/retry option leaves that behavior off.
+Kafka clients are not started merely by setting broker configuration: create the publisher/consumer in code and call `Start`. The consumer is closed by the app lifecycle. Omitting a DLQ/retry option leaves that behavior off.
 
 ### Outbox And Audit Events
 
-The outbox stores an event in the same SQL transaction as the business change. A service-owned worker publishes committed rows later, so a process crash does not silently lose the event. Rows are ordered by key: an older non-`SENT` row blocks later rows for that key. After the configured maximum attempts, the row becomes `DEAD` and continues to block that key until an operator resolves it. For generic messages, put the consumer's idempotency key in your payload or headers; the SQL `event_id` is stored by the outbox but is not automatically exposed as a standard Kafka header. For audit events, consumers can use CloudEvents `ce_id` and persist deduplication with their side effect.
+| | Guidance |
+|---|---|
+| What | A transactional table plus a worker that publishes committed events. |
+| When to use | A database update must not silently lose its corresponding event. |
+| How to turn on | Call `PublishTx` inside the transaction and explicitly start a configured worker. |
+| How to turn off | Do not publish outbox rows or create/start a worker. |
+
+The outbox stores an event in the same SQL transaction as the business change. A service-owned worker publishes committed rows later, so a process crash does not silently lose the event. Rows are ordered by key: an older non-`SENT` row blocks later rows for that key. After the configured maximum attempts, the row becomes `DEAD` and continues to block that key until an operator resolves it.
+
+For generic messages, put the consumer's idempotency key in your payload or headers; the SQL `event_id` is stored by the outbox but is not automatically exposed as a standard Kafka header. For audit events, consumers can use CloudEvents `ce_id` and persist deduplication with their side effect.
 
 **Excerpt, inside a transaction:**
 
@@ -280,7 +359,9 @@ if err := publisher.PublishTx(ctx, tx, messaging.Message{Topic: "orders", Key: k
 }
 ```
 
-`PublishAudit` writes CloudEvents 1.0 headers: `ce_specversion`, `ce_id`, `ce_type`, `ce_source`, `ce_time`, `ce_subject`, and `ce_sequence`. It requires a UUID `ce_id`; `ce_subject` is the Kafka key. Audit logging includes metadata, not event payload. `app.New` does not start the worker. See [Messaging Pattern](docs/MESSAGING_PATTERN.md).
+`PublishAudit` writes CloudEvents 1.0 headers: `ce_specversion`, `ce_id`, `ce_type`, `ce_source`, `ce_time`, `ce_subject`, and `ce_sequence`. It requires a UUID `ce_id`; `ce_subject` is the Kafka key.
+
+Audit logging includes metadata, not event payload. See [Messaging Pattern](docs/MESSAGING_PATTERN.md).
 
 **Excerpt, add an audit event to the caller's transaction:**
 
@@ -298,7 +379,7 @@ err := publisher.PublishAudit(ctx, tx, outbox.AuditEvent{
 })
 ```
 
-Start the worker explicitly after creating it; stop it as part of service shutdown. Do not start an outbox worker when the service has not configured a database and publisher. Omitting worker creation disables delivery; it does not delete rows from the outbox.
+Stop the worker as part of service shutdown. Omitting worker creation does not delete rows from the outbox.
 
 **Excerpt, when the database and Kafka publisher are enabled:**
 
@@ -317,6 +398,13 @@ defer worker.Stop(context.Background())
 
 ### Database And Migrations
 
+| | Guidance |
+|---|---|
+| What | SQL Server/MySQL pools, GORM, transaction helpers, and Goose migration support. |
+| When to use | Persistence or schema migration is part of the service. |
+| How to turn on | Add aliases to `DB_LIST` or build `Databases` in code; run migrations under service policy. |
+| How to turn off | Leave `DB_LIST` empty and migration autorun false. |
+
 Supported SQL drivers are SQL Server and MySQL. `DB_LIST` selects one or more aliases; each becomes a `DB_<ALIAS>_*` group. Aliases are normalized to lowercase. Default pool limits are 20 open, 10 idle, 2-minute idle lifetime, and 5-minute connection lifetime; set alternatives in `cfg.Databases["primary"]`.
 
 Migrations use Goose and are not automatic by default. `migration.AutoRunUp(cfg)` does nothing unless `cfg.Migration.AutoRun` is true and a DB alias/directory are configured. A service chooses when to run migrations.
@@ -330,7 +418,7 @@ cfg.Migration.DBName = "primary"
 cfg.Migration.Dir = "./migrations"
 ```
 
-After loading and overriding Config, `app.New` opens each configured alias. Access a database with `application.SQLByName("primary")`; remove the alias from `DB_LIST` (or from the code-built map) to turn it off.
+After loading and overriding Config, `app.New` opens each configured alias. Access a database with `application.SQLByName("primary")`.
 
 **Excerpt, after `app.New` with the alias configured:**
 
@@ -340,19 +428,18 @@ sqlDB := primary.DB
 gormDB := primary.Gorm()
 ```
 
-**Excerpt, after `app.New` with the alias configured:**
-
-```go
-primary := application.SQLByName("primary")
-sqlDB := primary.DB
-gormDB := primary.Gorm()
-```
-
-`app.New` opens configured database aliases and applies their pool fields. Disable autorun by leaving `Migration.AutoRun` false. Remove an alias from `DB_LIST` to disable that environment-loaded connection.
+`app.New` opens configured database aliases and applies their pool fields.
 
 ### Cache
 
-Setting `REDIS_ADDRESS` enables Redis; `REDIS_PASSWORD` is optional. Setting `MEMCACHED_SERVERS` enables Memcached. Enabled caches are required readiness dependencies. Leave the address/list unset to disable each cache.
+| | Guidance |
+|---|---|
+| What | Shared `cache.Cache` operations backed by Redis or Memcached. |
+| When to use | Values should be cached outside the service process. |
+| How to turn on | Set `REDIS_ADDRESS` or `MEMCACHED_SERVERS`; use the app cache. |
+| How to turn off | Leave both enabling values unset. |
+
+`REDIS_PASSWORD` is optional. Enabled caches are required readiness dependencies.
 
 **Excerpt, after `app.New` with the selected cache enabled:**
 
@@ -360,9 +447,16 @@ Setting `REDIS_ADDRESS` enables Redis; `REDIS_PASSWORD` is optional. Setting `ME
 value, err := application.RedisCache().Get(ctx, "catalog:42")
 ```
 
-Both backends implement `cache.Cache` (`Get`, `Set`, `Delete`, `Health`, `Close`). `app.New` connects and checks enabled backends; remove the enabling address/list to turn one off. The returned cache is nil when its integration is disabled.
+Both backends implement `cache.Cache` (`Get`, `Set`, `Delete`, `Health`, `Close`). `app.New` connects and checks enabled backends. The returned cache is nil when its integration is not configured.
 
 ### Tracing And Metrics
+
+| | Guidance |
+|---|---|
+| What | OpenTelemetry OTLP traces and Prometheus runtime metrics. |
+| When to use | Export traces to an OTLP gRPC collector or expose service metrics. |
+| How to turn on | Set `APM_ENDPOINT`; set `METRICS_ENABLED=true` for metrics. |
+| How to turn off | Leave `APM_ENDPOINT` empty and `METRICS_ENABLED=false`. |
 
 `APM_ENDPOINT` enables OpenTelemetry OTLP over gRPC. Transport is secure by default; TLS/CA behavior is set through Config fields. The collector/APM server must accept OTLP gRPC.
 
@@ -377,11 +471,19 @@ cfg.Observability.OTLPEndpoint = "collector.internal:4317"
 cfg.Metrics.Enabled = true
 ```
 
-Leave the OTLP endpoint empty to disable tracing; set `Metrics.Enabled` false (the default) to disable recording and make `/metrics` return 404.
 
 ### Health, Readiness, And Shutdown
 
-`/health` reports that the process can answer. `/ready` reports whether required dependencies are available. On shutdown, readiness becomes 503 and gRPC health becomes `NOT_SERVING`; then the default drain delay is 3 seconds and the graceful shutdown budget is 25 seconds. Set `App.DrainDelay` and `App.ShutdownTimeout` in code to fit the deployment termination grace period. `server.Run` coordinates the app and server components.
+| | Guidance |
+|---|---|
+| What | Probe endpoints, gRPC health state, and graceful application shutdown. |
+| When to use | Long-running services managed by probes or deployment termination. |
+| How to turn on | Gateway/gRPC server register health support; run them with `server.Run`. |
+| How to turn off | These behaviors are part of a constructed server; omit a transport only if the service does not expose it. |
+
+`/health` reports that the process can answer. `/ready` reports whether required dependencies are available. On shutdown, readiness becomes 503 and gRPC health becomes `NOT_SERVING`; then the default drain delay is 3 seconds and the graceful shutdown budget is 25 seconds.
+
+Set `App.DrainDelay` and `App.ShutdownTimeout` in code to fit the deployment termination grace period. `server.Run` coordinates the app and server components.
 
 **Check locally:**
 
@@ -394,17 +496,27 @@ These endpoints are mounted by the gateway. Readiness includes only enabled/requ
 
 ### Diagnostic Snapshot
 
-Diagnostics are enabled by default. The watcher checks every 30 seconds and emits a warning snapshot when goroutines reach 5,000 or the sampled heap-objects bytes reach 80% of the cgroup memory limit. It logs reason, heap/memory numbers, goroutine count, GC counters, top 10 heap functions, and grouped top goroutine frames (up to 5 frames each). A 10-minute cooldown limits repeated snapshots. If no cgroup memory limit is available, the heap trigger is disabled; the goroutine trigger still works. Set `DIAG_ENABLED=false` to turn the watcher off.
+| | Guidance |
+|---|---|
+| What | A bounded warning log with runtime memory, GC, heap, and goroutine data. |
+| When to use | Diagnose a process that crosses a configured heap or goroutine threshold. |
+| How to turn on | Enabled by default; thresholds and interval are Config fields. |
+| How to turn off | Set `DIAG_ENABLED=false` or `cfg.Diagnostics.Enabled=false`. |
 
-**Excerpt, code override:**
+The watcher checks every 30 seconds and emits a warning snapshot when goroutines reach 5,000 or sampled heap-object bytes reach 80% of the cgroup memory limit. It logs reason, heap/memory numbers, goroutine count, GC counters, top 10 heap functions, and grouped top goroutine frames (up to 5 frames each).
 
-```go
-cfg.Diagnostics.Enabled = false
-```
+A 10-minute cooldown limits repeated snapshots. If no cgroup memory limit is available, the heap trigger is disabled; the goroutine trigger still works.
 
-Leave it true (the default) to run the watcher, or set it false before `app.New` to turn it off. No diagnostic snapshot is taken unless a configured threshold is crossed.
+No diagnostic snapshot is taken unless a configured threshold is crossed.
 
 ### Security
+
+| | Guidance |
+|---|---|
+| What | HTTP signature/JWT checks, body limits, CORS, and optional pprof. |
+| When to use | Validate trusted callers and protect public HTTP exposure. |
+| How to turn on | Configure signature/JWT fields, body limit/CORS; enable pprof only outside production. |
+| How to turn off | Keep signature/JWT disabled, CORS origins empty, and pprof false; body limit remains required. |
 
 - **HTTP signatures:** a nonempty `AUTH_SIGNATURE_MASTER_KEY` enables HMAC-SHA256 validation of method, path, timestamp, and body. Defaults are `x-signature`, `x-timestamp`, and five-minute drift. The integration-specific signature contract still needs consumer confirmation; see `Q-SIG` in [Security](docs/SECURITY.md).
 - **Internal JWT:** disabled by default. Enabling requires `Auth.InternalJWT.PublicKey`; the verifier accepts RS256/384/512 and can use JWKS configuration. Include-method and exclude-method lists cannot both be set.
@@ -420,7 +532,7 @@ cfg.Auth.Signature.MasterKey = signatureSecret
 cfg.Auth.Signature.Enabled = true
 ```
 
-Keep the key in a secret manager/environment injection path; do not commit it. To disable signature checks, keep the key empty and `Enabled` false. Body-size limits, CORS, and pprof are controlled by `HTTP.MaxBodyBytes`, `HTTP.CORSAllowedOrigins`, and `HTTP.PprofEnabled`.
+Keep the key in a secret manager/environment injection path; do not commit it. Body-size limits, CORS, and pprof are controlled by `HTTP.MaxBodyBytes`, `HTTP.CORSAllowedOrigins`, and `HTTP.PprofEnabled`.
 
 **Excerpt, code-controlled internal JWT enablement:**
 
@@ -431,6 +543,13 @@ cfg.Auth.InternalJWT.IncludeMethods = []string{"/example.v1.Service/Update"}
 ```
 
 ### Testing Helpers
+
+| | Guidance |
+|---|---|
+| What | Test-only recording logger, fake publisher, isolated registry, and HTTP fixtures. |
+| When to use | Unit/integration tests need deterministic infrastructure substitutes. |
+| How to turn on | Import `github.com/yogayulanda/go-core/coretest` from test code. |
+| How to turn off | Do not import it from production packages; it has no runtime activation. |
 
 `coretest` provides a recording logger, fake publisher, isolated response registry, and reusable HTTP fixtures. Use these to test service behavior without external Kafka/HTTP infrastructure.
 
@@ -464,16 +583,27 @@ The full source-derived environment and code-field tables are in [Configuration 
 ## Common Mistakes / FAQ
 
 1. **My JSON is not wrapped.** `/health`, `/ready`, `/version`, `/metrics`, and `/debug/pprof*` bypass the envelope. A handler wrapped with `gateway.Raw`/`RawHTTP` also opts out.
+
 2. **My custom code becomes `CORE-9000`.** Register a valid `errors.Def` before serving requests. Duplicate/invalid registrations fail.
-3. **My request ID is absent downstream.** Use `observability.EnsureFieldBag` and the go-core HTTP/gRPC client. HTTP forwarding additionally needs `httpclient.WithInternalPropagation()`.
+
+3. **My request ID is absent downstream.** The gateway and gRPC interceptor create the field bag for each incoming request. Use `observability.EnsureFieldBag` only for a context created outside a request, such as a worker or background goroutine. HTTP forwarding additionally needs `httpclient.WithInternalPropagation()`.
+
 4. **That header did not propagate.** Propagation is opt-in and caller-controlled. It does not validate destination hosts; only enable it for trusted destinations.
+
 5. **pprof refuses to start.** It is disabled by default and forbidden in `prod`/`production`.
+
 6. **`/metrics` returns 404.** This is expected until `METRICS_ENABLED=true`.
+
 7. **Kafka TLS is not enabled.** Configure `KAFKA_JKS_FILE` with JKS or PEM trust material; JKS requires its password. TLS configuration is shared across Kafka clients.
+
 8. **An HTTP request does not retry.** Retries are off by default. Add `httpclient.WithRetry` only for safe operations.
+
 9. **A circuit breaker opens unexpectedly.** The HTTP client breaker defaults to more than five consecutive failures and a 60-second open interval; configure it per client with `WithCircuitBreaker`.
+
 10. **Migrations did not run.** `Migration.AutoRun` defaults false. Explicitly set migration Config fields or invoke migration code under service policy.
+
 11. **A plain `HandlePath` route has no access log.** Successful direct handlers that do not call gRPC currently have this known gap. gRPC-backed routes log at the interceptor; Raw routes log at the envelope boundary. See [TODO backlog](docs/TODO_BACKLOG.md).
+
 12. **A `DEAD` outbox event blocks later events.** Ordering is per key. Resolve or replay the older event before later rows for that key can proceed.
 
 ## Development
