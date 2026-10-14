@@ -26,6 +26,28 @@ Gateway memasang `/health`, `/ready`, `/version`, `/metrics`, CORS allowlist, bo
 
 Saat shutdown, `/ready` menjadi 503 dan gRPC health menjadi `NOT_SERVING`, kemudian `DrainDelay` (3s default) berjalan sebelum server dihentikan graceful di bawah `ShutdownTimeout` (25s default). `ShutdownTimeout + DrainDelay` sebaiknya muat dalam termination grace period.
 
+### Raw Gateway Responses
+
+Route gateway normal membungkus response 2xx dengan success envelope go-core. Gunakan `gateway.Raw` untuk route yang harus meneruskan response transport apa adanya, misalnya transparent proxy, webhook callback, atau file download:
+
+```go
+err := mux.HandlePath(http.MethodGet, "/partner/{id}", gateway.Raw(func(w http.ResponseWriter, r *http.Request, params map[string]string) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    _, _ = w.Write([]byte(`{"partner":"response"}`))
+}))
+```
+
+Untuk handler biasa yang mengimplementasikan `http.Handler`, bungkus dengan `gateway.RawHTTP(handler)` lalu panggil dari adapter `HandlePath`:
+
+```go
+err := mux.HandlePath(http.MethodGet, "/download", func(w http.ResponseWriter, r *http.Request, _ map[string]string) {
+    gateway.RawHTTP(downloadHandler).ServeHTTP(w, r)
+})
+```
+
+Raw melewati success envelope saja; request identity, panic recovery, body limit, signature validation, tracing, CORS, metrics, dan access logging tetap berlaku. Handler bertanggung jawab penuh atas status, headers, content type, body, serta format error response. Jangan gunakan Raw untuk API normal yang mengandalkan envelope go-core. Untuk menemukan pendaftaran raw di source service, jalankan `rg -n 'gateway\.Raw(HTTP)?\('`.
+
 ## Database And Transactions
 
 SQL driver yang didukung: `sqlserver` dan `mysql`. `database.New(cfg, log, database.WithSlowQueryThreshold(time.Second))` mengembalikan wrapper yang menyediakan raw `*sql.DB` dan `Gorm()`.
