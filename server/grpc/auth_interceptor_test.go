@@ -28,7 +28,7 @@ func TestAuthInterceptor_IncludeMethod_RequiresToken(t *testing.T) {
 		IncludeMethods: []string{"/history.v1.HistoryService/CreateTransactionHistory"},
 	})
 
-	called, err, _ := invokeAuthInterceptor(
+	called, _, err := invokeAuthInterceptor(
 		verifier,
 		"/history.v1.HistoryService/CreateTransactionHistory",
 		nil,
@@ -52,7 +52,7 @@ func TestAuthInterceptor_IncludeMethod_WithValidToken_PassesAndInjectsClaims(t *
 	})
 
 	md := metadata.Pairs("authorization", "Bearer "+token)
-	called, err, claims := invokeAuthInterceptor(
+	called, claims, err := invokeAuthInterceptor(
 		verifier,
 		"/history.v1.HistoryService/CreateTransactionHistory",
 		md,
@@ -78,7 +78,7 @@ func TestAuthInterceptor_IncludeMethod_SkipUnlistedMethod(t *testing.T) {
 		IncludeMethods: []string{"/history.v1.HistoryService/CreateTransactionHistory"},
 	})
 
-	called, err, _ := invokeAuthInterceptor(
+	called, _, err := invokeAuthInterceptor(
 		verifier,
 		"/history.v1.HistoryService/GetUserHistory",
 		nil,
@@ -101,7 +101,7 @@ func TestAuthInterceptor_ExcludeMethod_BypassOnlyExcluded(t *testing.T) {
 		ExcludeMethods: []string{"/grpc.health.v1.Health/Check"},
 	})
 
-	called, err, _ := invokeAuthInterceptor(
+	called, _, err := invokeAuthInterceptor(
 		verifier,
 		"/grpc.health.v1.Health/Check",
 		nil,
@@ -110,7 +110,7 @@ func TestAuthInterceptor_ExcludeMethod_BypassOnlyExcluded(t *testing.T) {
 		t.Fatalf("excluded method should bypass auth, err=%v called=%v", err, called)
 	}
 
-	called, err, _ = invokeAuthInterceptor(
+	called, _, err = invokeAuthInterceptor(
 		verifier,
 		"/history.v1.HistoryService/GetUserHistory",
 		nil,
@@ -130,7 +130,7 @@ func TestAuthInterceptor_MetadataMode_InjectsClaimsAndLogsSummary(t *testing.T) 
 		"x-claim-tenant", "acme",
 	)
 
-	called, err, claims := invokeAuthInterceptorWithLogger(
+	called, claims, err := invokeAuthInterceptorWithLogger(
 		&security.InternalJWTVerifier{},
 		log,
 		"/history.v1.HistoryService/GetUserHistory",
@@ -162,7 +162,7 @@ func TestAuthInterceptor_InvalidToken_LogsFailureAndSanitizesClientError(t *test
 	log := &captureAuthLogger{}
 	md := metadata.Pairs("authorization", "Bearer invalid-token")
 
-	called, err, _ := invokeAuthInterceptorWithLogger(
+	called, _, err := invokeAuthInterceptorWithLogger(
 		verifier,
 		log,
 		"/history.v1.HistoryService/GetUserHistory",
@@ -188,7 +188,7 @@ func invokeAuthInterceptor(
 	verifier *security.InternalJWTVerifier,
 	fullMethod string,
 	md metadata.MD,
-) (called bool, err error, claims *security.Claims) {
+	) (called bool, claims *security.Claims, err error) {
 	return invokeAuthInterceptorWithLogger(verifier, nil, fullMethod, md)
 }
 
@@ -197,7 +197,7 @@ func invokeAuthInterceptorWithLogger(
 	log logger.Logger,
 	fullMethod string,
 	md metadata.MD,
-) (called bool, err error, claims *security.Claims) {
+) (called bool, claims *security.Claims, err error) {
 	ctx := context.Background()
 	if md != nil {
 		ctx = metadata.NewIncomingContext(ctx, md)
@@ -215,7 +215,7 @@ func invokeAuthInterceptorWithLogger(
 			return "ok", nil
 		},
 	)
-	return called, err, claims
+	return called, claims, err
 }
 
 func newVerifierAndToken(t *testing.T, cfg config.InternalJWTConfig) (*security.InternalJWTVerifier, string) {

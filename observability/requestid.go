@@ -34,9 +34,10 @@ func IsValidRequestID(requestID string) bool {
 		return false
 	}
 	for _, r := range requestID {
-		if !(unicode.IsLetter(r) && r <= unicode.MaxASCII) && !(r >= '0' && r <= '9') && r != '.' && r != '_' && r != '-' {
-			return false
+		if (unicode.IsLetter(r) && r <= unicode.MaxASCII) || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			continue
 		}
+		return false
 	}
 	return true
 }

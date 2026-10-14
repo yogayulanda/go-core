@@ -22,13 +22,14 @@ func registerPprofEndpoints(mux *runtime.ServeMux) error {
 	for _, p := range profiles {
 		profile := p // capture loop variable
 		if err := mux.HandlePath("GET", "/debug/pprof/"+profile, func(w http.ResponseWriter, r *http.Request, _ map[string]string) {
-			if profile == "cmdline" {
+			switch profile {
+			case "cmdline":
 				pprof.Cmdline(w, r)
-			} else if profile == "profile" {
+			case "profile":
 				pprof.Profile(w, r)
-			} else if profile == "trace" {
+			case "trace":
 				pprof.Trace(w, r)
-			} else {
+			default:
 				pprof.Handler(profile).ServeHTTP(w, r)
 			}
 		}); err != nil {
