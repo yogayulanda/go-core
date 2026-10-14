@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/yogayulanda/go-core/config"
@@ -45,6 +47,36 @@ func TestRequestIDValidation(t *testing.T) {
 			t.Errorf("expected request ID %q to be invalid", requestID)
 		}
 	}
+}
+
+func TestIsValidRequestIDMatchesPreviousPredicate(t *testing.T) {
+	for value := 0; value <= 255; value++ {
+		candidate := string([]byte{byte(value)})
+		if got, want := IsValidRequestID(candidate), previousIsValidRequestID(candidate); got != want {
+			t.Errorf("byte 0x%02x: IsValidRequestID=%t, previous predicate=%t", value, got, want)
+		}
+	}
+
+	for _, value := range []rune{'é', '中', 'Ω', '\u0301', '😀', utf8.RuneError} {
+		candidate := string(value)
+		if got, want := IsValidRequestID(candidate), previousIsValidRequestID(candidate); got != want {
+			t.Errorf("rune %U: IsValidRequestID=%t, previous predicate=%t", value, got, want)
+		}
+	}
+}
+
+func previousIsValidRequestID(requestID string) bool {
+	if len(requestID) == 0 || len(requestID) > 64 {
+		return false
+	}
+	for _, r := range requestID {
+		// Keep the historical expression intact as the equivalence-test oracle.
+		//nolint:staticcheck // Preserve the exact pre-change predicate.
+		if !(unicode.IsLetter(r) && r <= unicode.MaxASCII) && !(r >= '0' && r <= '9') && r != '.' && r != '_' && r != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func TestFieldBagSetAndRestoreIncomingIdentity(t *testing.T) {
