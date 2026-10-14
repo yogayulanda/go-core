@@ -26,7 +26,10 @@ For stable `v1` adoption, this is the default bootstrap flow unless a service ha
 - If using outbox, keep worker startup explicit through `StartChecked(ctx)` and use `RunOnce(ctx)` for deterministic tests or service-controlled batch execution.
 - Use `server.LogStartupReadiness(...)` if startup readiness logs are needed.
 - Treat `server.Run(...)` as the owner of runtime orchestration; it now emits structured lifecycle/service logs for startup, shutdown, and component failures.
-- Treat gRPC and gateway wrappers as the default transport observability boundary; they emit aligned request ID, request metrics, service metrics, and `ServiceLog`.
+- Treat gRPC and gateway wrappers as the default transport observability boundary. A REST request that reaches gRPC gets one access log from the gRPC interceptor; gateway metrics middleware records metrics only. Gateway access logs cover pre-gRPC failures.
+- HTTP client retries are opt-in (`httpclient.WithRetry`); received HTTP statuses, including 5xx, are responses rather than transport errors.
+- Kafka SASL supports `PLAIN`, `SCRAM-SHA-256`, and `SCRAM-SHA-512`; Kafka TLS accepts JKS or PEM material. Configure producer, consumer, and readiness consistently.
+- `DIAG_ENABLED` defaults to true and enables bounded goroutine/cgroup-heap diagnostic snapshots. Disable explicitly where runtime profiling is prohibited.
 - Prefer `examples/bootstrap_example.go` as the starter wiring reference.
 
 ## Service Layer Shape
@@ -43,7 +46,9 @@ For stable `v1` adoption, this is the default bootstrap flow unless a service ha
 Only services that belong to the transaction-oriented class should use:
 
 - `logger.TransactionLog`
-- `app_transaction_total`
+- context-backed `labels.gtid` and transaction log fields
+
+There is no transaction counter. Prometheus recording and `/metrics` are disabled by default and require `METRICS_ENABLED=true`.
 
 Other services should stay on the generic logging and request metrics baseline unless a separate platform-standard contract is defined.
 
@@ -55,8 +60,8 @@ These runtime and transport signals are part of the stable `v1` baseline contrac
 - `app.Start(...)` emits `app_runtime` start and shutdown-request signals.
 - lifecycle shutdown emits `lifecycle_shutdown` and `shutdown_hook` results.
 - `server.Run(...)` emits `runtime_orchestration` and `component_start` results.
-- gRPC transport emits `grpc_request` service logs plus request/service metrics.
-- HTTP gateway emits `http_request` service logs plus HTTP/service metrics.
+- gRPC transport emits one access log per completed RPC plus request/service metrics.
+- The HTTP gateway emits HTTP/service metrics. A REST request that reaches gRPC receives its one access log from the gRPC interceptor; pre-gRPC failures are logged by the gateway.
 - messaging publisher emits `message_publish` service logs plus publish metrics.
 - messaging consumer emits `message_consume` service logs plus consume/process metrics.
 - outbox runtime emits `outbox_worker` and `outbox_batch` service logs plus batch metrics.

@@ -3,76 +3,59 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
-	"github.com/yogayulanda/go-core/app"
-	"github.com/yogayulanda/go-core/observability"
-
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
-	coreErrors "github.com/yogayulanda/go-core/errors"
+	"github.com/yogayulanda/go-core/app"
+	coreerrors "github.com/yogayulanda/go-core/errors"
 )
 
-func customErrorHandler(app *app.App) runtime.ErrorHandlerFunc {
-	return func(
-		ctx context.Context,
-		mux *runtime.ServeMux,
-		marshaler runtime.Marshaler,
-		w http.ResponseWriter,
-		r *http.Request,
-		err error,
-	) {
-		requestID := observability.GetRequestID(ctx)
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("x-request-id", requestID)
-
-		httpStatus := httpStatusFromError(err)
-		w.WriteHeader(httpStatus)
-
-		traceID := requestID
-		if span := trace.SpanFromContext(ctx); span != nil && span.SpanContext().IsValid() {
-			traceID = span.SpanContext().TraceID().String()
+func customErrorHandler(_ *app.App) runtime.ErrorHandlerFunc {
+	return func(ctx context.Context, _ *runtime.ServeMux, _ runtime.Marshaler, w http.ResponseWriter, r *http.Request, err error) {
+		code := "CORE-9000"
+		var details []coreerrors.Detail
+		var appErr *coreerrors.AppError
+		if errors.As(err, &appErr) {
+			def, _ := coreerrors.Resolve(appErr.Code)
+			code = def.Code
+			if code == "CORE-1000" {
+				details = appErr.Details
+			}
+		} else if info, ok := coreerrors.InfoFromGRPC(err); ok {
+			code = info.Code
+			if code == "CORE-1000" {
+				details = coreerrors.DetailsFromGRPC(err)
+			}
 		}
-
-		txID := observability.GetTransactionID(ctx)
-
-		resp := coreErrors.ErrorResponseFromError(err, traceID, txID)
-		resp.Timestamp = time.Now().UTC().Format(time.RFC3339)
-
-		_ = json.NewEncoder(w).Encode(resp)
+		writeGatewayError(ctx, w, r.Header.Get(requestIDHeader), code, details)
 	}
 }
 
-func httpStatusFromError(err error) int {
-	st, ok := status.FromError(err)
-	if ok {
-		return runtime.HTTPStatusFromCode(st.Code())
+func writeGatewayError(ctx context.Context, w http.ResponseWriter, requestID, code string, details []coreerrors.Detail) {
+	def, registered := coreerrors.Lookup(code)
+	if !registered {
+		def, _ = coreerrors.Lookup("CORE-9000")
 	}
-
-	if resp := coreErrors.ErrorResponseFromError(err, "", ""); resp.Code != "" {
-		return runtime.HTTPStatusFromCode(grpcStatusCodeFromCoreCode(coreErrors.Code(resp.Code)))
+	status := string(def.Class)
+	if def.Class == coreerrors.ClassUnknown {
+		status = string(coreerrors.ClassPending)
 	}
-
-	return http.StatusInternalServerError
-}
-
-func grpcStatusCodeFromCoreCode(code coreErrors.Code) codes.Code {
-	switch code {
-	case coreErrors.CodeInvalidRequest:
-		return codes.InvalidArgument
-	case coreErrors.CodeUnauthorized, coreErrors.CodeSessionExpired:
-		return codes.Unauthenticated
-	case coreErrors.CodeForbidden:
-		return codes.PermissionDenied
-	case coreErrors.CodeNotFound:
-		return codes.NotFound
-	case coreErrors.CodeServiceUnavailable:
-		return codes.Unavailable
-	default:
-		return codes.Internal
+	body := gatewayEnvelope{
+		Status:       status,
+		ResponseCode: def.Code,
+		Message:      coreerrors.Message(ctx, def.Code),
+		RequestID:    requestID,
+		Timestamp:    time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
 	}
+	if def.Code == "CORE-1000" {
+		body.Details = details
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if requestID != "" {
+		w.Header().Set(requestIDHeader, requestID)
+	}
+	w.WriteHeader(def.HTTPStatus)
+	_ = json.NewEncoder(w).Encode(body)
 }

@@ -1,20 +1,15 @@
 package observability
 
-import (
-	"context"
-)
+import "context"
 
-const transactionIDKey contextKey = "transaction_id"
-
-// WithTransactionID injects transaction ID into context.
-func WithTransactionID(ctx context.Context, transactionID string) context.Context {
-	return context.WithValue(ctx, transactionIDKey, transactionID)
+// WithGTID injects the money transaction identifier into the request field bag.
+func WithGTID(ctx context.Context, gtid string) context.Context {
+	ctx = EnsureFieldBag(ctx)
+	_ = SetLabel(ctx, "gtid", gtid)
+	return ctx
 }
 
-// GetTransactionID extracts transaction ID from context.
-func GetTransactionID(ctx context.Context) string {
-	if val, ok := ctx.Value(transactionIDKey).(string); ok {
-		return val
-	}
-	return ""
+// GetGTID extracts the money transaction identifier from the request field bag.
+func GetGTID(ctx context.Context) string {
+	return Labels(ctx)["gtid"]
 }

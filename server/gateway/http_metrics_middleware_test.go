@@ -1,40 +1,80 @@
 package gateway
 
-import "testing"
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
 
-func TestNormalizeHTTPRoute(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{name: "root", in: "/", want: "/"},
-		{name: "health", in: "/health", want: "/health"},
-		{name: "numeric id", in: "/v1/history/123", want: "/v1/history/:id"},
-		{name: "uuid id", in: "/v1/history/90fb72ed-44a8-4836-af08-8979ed578ef8", want: "/v1/history/:id"},
-		{name: "mixed dynamic", in: "/v1/history/seed-tx-001", want: "/v1/history/:param"},
-		{name: "long token", in: "/v1/history/abcdefghijklmnopqrstuvwxyz123456", want: "/v1/history/:param"},
-		{name: "stable path", in: "/v1/history", want: "/v1/history"},
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/yogayulanda/go-core/app"
+	"github.com/yogayulanda/go-core/config"
+)
+
+func TestHTTPMetricsUseMatchedTemplateAndBoundUnmatchedRoutes(t *testing.T) {
+	const serviceName = "route-template-metrics-test"
+	application, err := app.New(context.Background(), &config.Config{
+		App:       config.AppConfig{ServiceName: serviceName, Environment: "dev", LogLevel: "error", ShutdownTimeout: time.Second},
+		Metrics:   config.MetricsConfig{Enabled: true},
+		Databases: map[string]config.DBConfig{},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeHTTPRoute(tt.in)
-			if got != tt.want {
-				t.Fatalf("normalizeHTTPRoute(%q) = %q, want %q", tt.in, got, tt.want)
-			}
-		})
+	mux := runtime.NewServeMux(runtime.WithMiddlewares(captureMatchedRoute))
+	if err := mux.HandlePath(http.MethodGet, "/v1/x/{id}", func(w http.ResponseWriter, _ *http.Request, _ map[string]string) {
+		w.WriteHeader(http.StatusOK)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	handler := withHTTPMetrics(application, mux)
+	for _, id := range []string{"GTID-1", "GTID-2"} {
+		request := httptest.NewRequest(http.MethodGet, "/v1/x/"+id, nil)
+		handler.ServeHTTP(httptest.NewRecorder(), request)
+	}
+	metrics := application.Metrics()
+	if got := testutil.ToFloat64(metrics.HTTPRequestTotal.WithLabelValues(serviceName, http.MethodGet, "/v1/x/{id=*}", "200")); got != 2 {
+		t.Fatalf("expected both matched IDs to share route template, got count %v", got)
+	}
+	for index := 0; index < 1000; index++ {
+		request := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/random/%d/unmatched", index), nil)
+		handler.ServeHTTP(httptest.NewRecorder(), request)
+	}
+	if got := testutil.ToFloat64(metrics.HTTPRequestTotal.WithLabelValues(serviceName, http.MethodGet, "unmatched", "404")); got != 1000 {
+		t.Fatalf("expected unmatched paths to share one bounded label, got count %v", got)
 	}
 }
 
-func TestIsLikelyDynamicSegment(t *testing.T) {
-	if !isLikelyDynamicSegment("abc12345") {
-		t.Fatalf("expected mixed alnum segment as dynamic")
+func TestHTTPMetricsDisabledDoesNotRecord(t *testing.T) {
+	const serviceName = "route-template-metrics-disabled-test"
+	application, err := app.New(context.Background(), &config.Config{
+		App:       config.AppConfig{ServiceName: serviceName, Environment: "dev", LogLevel: "error", ShutdownTimeout: time.Second},
+		Databases: map[string]config.DBConfig{},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !isLikelyDynamicSegment("very-long-token-value-001") {
-		t.Fatalf("expected dashed token segment as dynamic")
+	if application.Metrics().Enabled {
+		t.Fatal("metrics should be disabled by default")
 	}
-	if isLikelyDynamicSegment("history") {
-		t.Fatalf("expected stable segment not dynamic")
+	metrics := application.Metrics()
+	counter := metrics.HTTPRequestTotal.WithLabelValues(serviceName, http.MethodGet, "unmatched", "404")
+	before := testutil.ToFloat64(counter)
+	handler := withHTTPMetrics(application, http.NotFoundHandler())
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/unmatched", nil))
+	if after := testutil.ToFloat64(counter); after != before {
+		t.Fatalf("disabled metrics recorded a request: before=%v after=%v", before, after)
+	}
+	mux := runtime.NewServeMux()
+	if err := registerMetricsEndpoint(mux, metrics); err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("disabled metrics endpoint returned %d, want 404", recorder.Code)
 	}
 }

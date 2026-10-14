@@ -2,7 +2,6 @@ package migration
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -52,16 +51,9 @@ func TestDefaultMigrationLockKey_ServiceAndDB_ReturnExpectedKey(t *testing.T) {
 	}
 }
 
-func TestAcquireMigrationLock_UnsupportedDriver_ReturnNoopRelease(t *testing.T) {
-	release, err := acquireMigrationLock(context.Background(), nil, "sqlite", "lock-key", 0)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if release == nil {
-		t.Fatalf("expected release func")
-	}
-	if err := release(context.Background()); err != nil {
-		t.Fatalf("unexpected release error: %v", err)
+func TestAcquireMigrationLock_UnsupportedDriver_ReturnsError(t *testing.T) {
+	if _, err := acquireMigrationLock(context.Background(), nil, "sqlite", "lock-key", 0); err == nil {
+		t.Fatal("expected unsupported driver error")
 	}
 }
 
@@ -106,32 +98,6 @@ func TestAcquireMigrationLock_SQLServerDriver_RouteToSQLServer(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	release, err := acquireMigrationLock(context.Background(), db, "sqlserver", "lock-key", 2*time.Second)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if err := release(context.Background()); err != nil {
-		t.Fatalf("unexpected release error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet sql expectations: %v", err)
-	}
-}
-
-func TestAcquireMigrationLock_PostgresDriver_RouteToPostgres(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("create sqlmock failed: %v", err)
-	}
-	defer db.Close()
-
-	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
-		WithArgs("lock-key").
-		WillReturnRows(sqlmock.NewRows([]string{"locked"}).AddRow(true))
-	mock.ExpectQuery(`SELECT pg_advisory_unlock\(hashtext\(\$1\)\)`).
-		WithArgs("lock-key").
-		WillReturnRows(sqlmock.NewRows([]string{"unlocked"}).AddRow(true))
-
-	release, err := acquireMigrationLock(context.Background(), db, "postgres", "lock-key", time.Second)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -235,91 +201,6 @@ func TestAcquireSQLServerLock_QueryError_ReturnError(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet sql expectations: %v", err)
-	}
-}
-
-func TestAcquirePostgresLock_LockAcquired_ReleaseSucceeds(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("create sqlmock failed: %v", err)
-	}
-	defer db.Close()
-
-	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
-		WithArgs("lock-key").
-		WillReturnRows(sqlmock.NewRows([]string{"locked"}).AddRow(true))
-	mock.ExpectQuery(`SELECT pg_advisory_unlock\(hashtext\(\$1\)\)`).
-		WithArgs("lock-key").
-		WillReturnRows(sqlmock.NewRows([]string{"unlocked"}).AddRow(true))
-
-	release, err := acquirePostgresLock(context.Background(), db, "lock-key", 100*time.Millisecond)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if err := release(context.Background()); err != nil {
-		t.Fatalf("unexpected release error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet sql expectations: %v", err)
-	}
-}
-
-func TestAcquirePostgresLock_LockNotAcquired_ReturnTimeout(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("create sqlmock failed: %v", err)
-	}
-	defer db.Close()
-
-	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
-		WithArgs("lock-key").
-		WillReturnRows(sqlmock.NewRows([]string{"locked"}).AddRow(false))
-
-	_, err = acquirePostgresLock(context.Background(), db, "lock-key", 0)
-	if err == nil {
-		t.Fatalf("expected timeout error")
-	}
-	if !strings.Contains(err.Error(), "lock timeout") {
-		t.Fatalf("expected timeout error, got: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet sql expectations: %v", err)
-	}
-}
-
-func TestAcquirePostgresLock_QueryError_ReturnError(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("create sqlmock failed: %v", err)
-	}
-	defer db.Close()
-
-	mock.ExpectQuery(`SELECT pg_try_advisory_lock\(hashtext\(\$1\)\)`).
-		WithArgs("lock-key").
-		WillReturnError(context.DeadlineExceeded)
-
-	_, err = acquirePostgresLock(context.Background(), db, "lock-key", time.Second)
-	if err == nil {
-		t.Fatalf("expected error")
-	}
-	if !strings.Contains(err.Error(), "acquire postgres migration lock failed") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet sql expectations: %v", err)
-	}
-}
-
-func TestAcquirePostgresLock_CanceledContext_ReturnContextError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	_, err := acquirePostgresLock(ctx, nil, "lock-key", time.Second)
-	if err == nil {
-		t.Fatalf("expected canceled context error")
-	}
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context canceled, got: %v", err)
 	}
 }
 

@@ -19,14 +19,13 @@ func TestParseLevel_ValidAndInvalid(t *testing.T) {
 	}
 }
 
-func TestIsDevEnvironment(t *testing.T) {
-	if !isDevEnvironment("dev") {
-		t.Fatalf("dev must be true")
-	}
-	if !isDevEnvironment("local") {
+func TestIsLocalEnvironment(t *testing.T) {
+	if !isLocalEnvironment("local") {
 		t.Fatalf("local must be true")
 	}
-	if isDevEnvironment("prod") {
-		t.Fatalf("prod must be false")
+	for _, environment := range []string{"dev", "sit", "uat", "prod"} {
+		if isLocalEnvironment(environment) {
+			t.Fatalf("%s must use ECS JSON", environment)
+		}
 	}
 }

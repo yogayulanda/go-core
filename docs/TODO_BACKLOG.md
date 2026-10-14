@@ -1,38 +1,24 @@
 # TODO Backlog
 
-This backlog lists improvement areas that are still untouched or only lightly touched relative to the newer foundation direction.
+This backlog tracks work intentionally left outside the completed foundation updates. Do not interpret deferred items as implemented defaults.
 
-## P1
+## Deferred Decisions
 
-Recently completed:
+- Downstream forks may choose an import module path before adoption; this does not block the public release.
+- Q-SIG confirmation is deferred and is not a release blocker; do not change the current signature contract without compatibility evidence.
 
-- runtime orchestration:
-  `app/` and `server/` now emit aligned `ServiceLog` for init, startup, readiness, orchestration, shutdown, and component failure signals
-- transport alignment:
-  gRPC and gateway now emit aligned request ID, request metrics, service metrics, and structured `ServiceLog`
-- messaging and outbox runtime:
-  publisher, consumer, and outbox worker now emit aligned `ServiceLog` and additive messaging/outbox metrics without hidden startup behavior
-- examples refresh:
-  older examples now reflect the current bootstrap, logging, DB, and messaging golden path
+## Operational Follow-Up
 
-## P2
+- Run `go test -tags=integration ./messaging/outbox/...` against disposable SQL Server and MySQL instances. Integration tests compile but were not run in the implementation environment because Docker was unavailable (S8).
+- Confirm which SASL mechanism the deployment's Kafka cluster uses. The library supports PLAIN, SCRAM-SHA-256, and SCRAM-SHA-512.
+- Reassess residual dependency advisories in `SECURITY_ADVISORIES.md` when a Go 1.26.x build image is available; current fixes requiring Go 1.25+ are intentionally deferred.
+- Confirm deployment termination grace period exceeds `DrainDelay + ShutdownTimeout` (default total 28 seconds, below the common 30-second value but leaves little margin).
 
-- cache ergonomics and observability:
-  align Redis and Memcached behavior with DB-style health and service logging expectations
-- error contract hardening:
-  strengthen REST/gRPC mapping consistency and service-facing error guidance
-- security observability:
-  make extractor/JWT behavior easier to operate and diagnose
-- migration adoption workflow:
-  improve migration runtime signals and upgrade guidance
+## Deferred Platform Work
 
-## P3
-
-- resilience observability:
-  connect retry/timeout helpers with better logging and usage guidance
-- script and gate alignment:
-  evolve local scripts and lint gates to reflect foundation maturity
-- versioning and upgrade discipline:
-  define clearer version/change expectations for future multi-service adoption
-- legacy `.ai` task cleanup:
-  refresh older tasks that predate the current foundation direction
+- Go 1.26.x toolchain upgrade requires a new build image. Keep `go 1.24.3` in `go.mod`; the current image target is Go 1.24.13.
+- GitLab CI (`GC-02`): add the separately approved GitLab pipeline; current CI remains GitHub Actions.
+- Migrate golangci-lint to v2 after compatibility and config review; current validated version is v1.64.8.
+- Inbox helper (`GC-37`) and protovalidate integration (`GC-38`) remain deferred.
+- `GC-23` and `GC-24` are resolved: OTLP to Elastic APM Server without an agent; metrics default false, endpoint/recording gated, transaction counter removed.
+- Dashboard, alert thresholds, data retention, and client-IP privacy retention remain deployment/platform responsibilities.

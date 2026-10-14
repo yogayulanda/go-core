@@ -9,7 +9,9 @@ import (
 func TestValidate_InternalJWTNegativeLeeway(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
-			ServiceName: "svc",
+			ServiceName:     "svc",
+			Environment:     "dev",
+			ShutdownTimeout: 25 * time.Second,
 		},
 		Auth: AuthConfig{
 			InternalJWT: InternalJWTConfig{
@@ -18,21 +20,54 @@ func TestValidate_InternalJWTNegativeLeeway(t *testing.T) {
 				Leeway:    -1 * time.Second,
 			},
 		},
+		HTTP: HTTPConfig{
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			MaxBodyBytes:      1 << 20,
+		},
 	}
 
 	err := cfg.Validate()
 	if err == nil {
 		t.Fatalf("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "INTERNAL_JWT_LEEWAY must be >= 0") {
+	if !strings.Contains(err.Error(), "InternalJWT Leeway must be >= 0") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_KafkaSASLAndJKSRequirements(t *testing.T) {
+	base := Config{App: AppConfig{ServiceName: "svc", Environment: "dev", ShutdownTimeout: 25 * time.Second}}
+	tests := []struct {
+		name   string
+		kafka  KafkaConfig
+		failed string
+	}{
+		{name: "username requires password", kafka: KafkaConfig{Username: "user", SASLMechanism: "PLAIN"}, failed: "KAFKA_PASSWORD"},
+		{name: "username requires supported mechanism", kafka: KafkaConfig{Username: "user", Password: "secret", SASLMechanism: "UNKNOWN"}, failed: "KAFKA_SASL_MECHANISM"},
+		{name: "mechanism requires username", kafka: KafkaConfig{Password: "secret", SASLMechanism: "PLAIN"}, failed: "KAFKA_USERNAME"},
+		{name: "JKS password requires file", kafka: KafkaConfig{JksPassword: "secret"}, failed: "KAFKA_JKS_FILE"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := base
+			cfg.Kafka = test.kafka
+			err := cfg.Validate()
+			if err == nil || !strings.Contains(err.Error(), test.failed) {
+				t.Fatalf("expected %s validation error, got %v", test.failed, err)
+			}
+		})
 	}
 }
 
 func TestValidate_InternalJWTIncludeExcludeConflict(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
-			ServiceName: "svc",
+			ServiceName:     "svc",
+			Environment:     "dev",
+			ShutdownTimeout: 25 * time.Second,
 		},
 		Auth: AuthConfig{
 			InternalJWT: InternalJWTConfig{
@@ -57,7 +92,9 @@ func TestValidate_InternalJWTIncludeExcludeConflict(t *testing.T) {
 func TestValidate_InternalJWTIncludeOnlyValid(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
-			ServiceName: "svc",
+			ServiceName:     "svc",
+			Environment:     "dev",
+			ShutdownTimeout: 25 * time.Second,
 		},
 		Auth: AuthConfig{
 			InternalJWT: InternalJWTConfig{
@@ -66,6 +103,13 @@ func TestValidate_InternalJWTIncludeOnlyValid(t *testing.T) {
 				Leeway:         10 * time.Second,
 				IncludeMethods: []string{"/a.b.C/Call"},
 			},
+		},
+		HTTP: HTTPConfig{
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			MaxBodyBytes:      1 << 20,
 		},
 	}
 
@@ -77,7 +121,9 @@ func TestValidate_InternalJWTIncludeOnlyValid(t *testing.T) {
 func TestValidate_GRPCTLSEnabledWithoutFiles(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
-			ServiceName: "svc",
+			ServiceName:     "svc",
+			Environment:     "dev",
+			ShutdownTimeout: 25 * time.Second,
 		},
 		GRPC: GRPCConfig{
 			TLSEnabled: true,
@@ -88,7 +134,7 @@ func TestValidate_GRPCTLSEnabledWithoutFiles(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "GRPC_TLS_CERT_FILE") || !strings.Contains(err.Error(), "GRPC_TLS_KEY_FILE") {
+	if !strings.Contains(err.Error(), "GRPC TLSCertFile") || !strings.Contains(err.Error(), "GRPC TLSKeyFile") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -97,6 +143,7 @@ func TestValidate_HTTPTLSEnabledWithoutFiles(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
 			ServiceName: "svc",
+			Environment: "dev",
 		},
 		HTTP: HTTPConfig{
 			TLSEnabled: true,
@@ -107,7 +154,7 @@ func TestValidate_HTTPTLSEnabledWithoutFiles(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "HTTP_TLS_CERT_FILE") || !strings.Contains(err.Error(), "HTTP_TLS_KEY_FILE") {
+	if !strings.Contains(err.Error(), "HTTP TLSCertFile") || !strings.Contains(err.Error(), "HTTP TLSKeyFile") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -116,6 +163,7 @@ func TestValidate_OTLPInsecureWithCACertConflict(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
 			ServiceName: "svc",
+			Environment: "dev",
 		},
 		Observability: ObservabilityConfig{
 			OTLPInsecure:   true,
@@ -127,7 +175,7 @@ func TestValidate_OTLPInsecureWithCACertConflict(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected validation error")
 	}
-	if !strings.Contains(err.Error(), "OTEL_EXPORTER_OTLP_CA_CERT_FILE must be empty") {
+	if !strings.Contains(err.Error(), "OTLPCACertFile must be empty") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -136,6 +184,7 @@ func TestValidate_MigrationAutoRunRequiresExplicitDBAndDir(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
 			ServiceName: "svc",
+			Environment: "dev",
 		},
 		Migration: MigrationConfig{
 			AutoRun: true,
@@ -154,7 +203,9 @@ func TestValidate_MigrationAutoRunRequiresExplicitDBAndDir(t *testing.T) {
 func TestValidate_MigrationDBMustExistWithNormalizedAlias(t *testing.T) {
 	cfg := &Config{
 		App: AppConfig{
-			ServiceName: "svc",
+			ServiceName:     "svc",
+			Environment:     "dev",
+			ShutdownTimeout: 25 * time.Second,
 		},
 		Databases: map[string]DBConfig{
 			"transaction_history": {
@@ -170,6 +221,13 @@ func TestValidate_MigrationDBMustExistWithNormalizedAlias(t *testing.T) {
 			AutoRun: true,
 			DBName:  "Transaction_History",
 			Dir:     "migrations/history",
+		},
+		HTTP: HTTPConfig{
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			MaxBodyBytes:      1 << 20,
 		},
 	}
 
@@ -192,6 +250,13 @@ func TestValidate_DBConnMaxIdleTimeNegative(t *testing.T) {
 				ConnMaxIdleTime: -1 * time.Second,
 				ConnMaxLifetime: time.Minute,
 			},
+		},
+		HTTP: HTTPConfig{
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      60 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			MaxBodyBytes:      1 << 20,
 		},
 	}
 
@@ -249,5 +314,50 @@ func TestValidate_ReturnsValidationErrorsType(t *testing.T) {
 	}
 	if len(validationErr.Issues) == 0 {
 		t.Fatalf("expected validation issues")
+	}
+}
+
+func TestValidate_AppEnvironmentAllowedValues(t *testing.T) {
+	for _, environment := range []string{"local", "dev", "sit", "uat", "prod"} {
+		t.Run(environment, func(t *testing.T) {
+			cfg := &Config{App: AppConfig{ServiceName: "svc", Environment: environment, ShutdownTimeout: 25 * time.Second}, HTTP: HTTPConfig{
+				ReadHeaderTimeout: 5 * time.Second,
+				ReadTimeout:       15 * time.Second,
+				WriteTimeout:      60 * time.Second,
+				IdleTimeout:       120 * time.Second,
+				MaxBodyBytes:      1 << 20,
+			}}
+			if err := cfg.Validate(); err != nil {
+				t.Fatalf("valid APP_ENV %q rejected: %v", environment, err)
+			}
+		})
+	}
+	for _, environment := range []string{"", "test", "production", "PROD"} {
+		t.Run("invalid_"+environment, func(t *testing.T) {
+			cfg := &Config{App: AppConfig{ServiceName: "svc", Environment: environment}}
+			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "APP_ENV") {
+				t.Fatalf("expected APP_ENV validation error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidate_PprofForbiddenInProduction(t *testing.T) {
+	cfg := &Config{
+		App:  AppConfig{ServiceName: "svc", Environment: "prod", ShutdownTimeout: 25 * time.Second},
+		HTTP: HTTPConfig{PprofEnabled: true, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second, MaxBodyBytes: 1 << 20},
+	}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "pprof is forbidden") {
+		t.Fatalf("expected production pprof validation error, got %v", err)
+	}
+}
+
+func TestValidate_HTTPTimeoutRelationship(t *testing.T) {
+	cfg := &Config{
+		App:  AppConfig{ServiceName: "svc", Environment: "dev", ShutdownTimeout: 25 * time.Second},
+		HTTP: HTTPConfig{ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 120 * time.Second, MaxBodyBytes: 1 << 20},
+	}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "WriteTimeout must be greater") {
+		t.Fatalf("expected timeout relationship validation error, got %v", err)
 	}
 }

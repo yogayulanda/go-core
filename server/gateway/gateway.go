@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -46,6 +47,9 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 
 	mux := runtime.NewServeMux(
 		runtime.WithErrorHandler(customErrorHandler(application)),
+		runtime.WithIncomingHeaderMatcher(incomingHeaderMatcher),
+		runtime.WithOutgoingHeaderMatcher(outgoingHeaderMatcher),
+		runtime.WithMiddlewares(captureMatchedRoute),
 	)
 
 	ctx := context.Background()
@@ -60,38 +64,50 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 	if err := registerVersionEndpoint(mux); err != nil {
 		return nil, fmt.Errorf("failed to register version endpoint: %w", err)
 	}
-	if err := registerMetricsEndpoint(mux); err != nil {
+	if err := registerMetricsEndpoint(mux, application.Metrics()); err != nil {
 		return nil, fmt.Errorf("failed to register metrics endpoint: %w", err)
 	}
 	if cfg.HTTP.PprofEnabled {
+		if cfg.App.Environment == "prod" || cfg.App.Environment == "production" {
+			return nil, fmt.Errorf("pprof is forbidden in production")
+		}
 		if err := registerPprofEndpoints(mux); err != nil {
 			return nil, fmt.Errorf("failed to register pprof endpoints: %w", err)
 		}
 	}
 
 	var handler http.Handler = mux
-	handler = withHTTPRequestID(handler)
 	handler = withHTTPMetrics(application, handler)
 	handler = withSuccessEnvelope(handler)
-	handler = withCORS(handler)
+	handler = withCORS(handler, cfg.HTTP.CORSAllowedOrigins, cfg.HTTP.CORSAllowedHeaders)
 	handler = otelhttp.NewHandler(handler, "http_gateway")
 	handler = withSignatureValidation(application, handler)
+	handler = withRequestBodyLimit(application, cfg.HTTP.MaxBodyBytes, handler)
 	handler = withPanicRecovery(application, handler)
+	handler = withHTTPRequestIdentity(application, cfg.HTTP.TrustedProxyHops, handler)
 
 	httpServer := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.HTTP.Port),
-		Handler:      handler,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              fmt.Sprintf(":%d", cfg.HTTP.Port),
+		Handler:           handler,
+		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+		ReadTimeout:       cfg.HTTP.ReadTimeout,
+		WriteTimeout:      cfg.HTTP.WriteTimeout,
+		IdleTimeout:       cfg.HTTP.IdleTimeout,
 	}
 
-	application.Lifecycle().Register(func(ctx context.Context) error {
+	application.RegisterServerShutdown("http_gateway", func(ctx context.Context) error {
+		startedAt := time.Now()
 		log.LogService(ctx, logger.ServiceLog{
 			Operation: "http_gateway",
 			Status:    "shutdown_requested",
 		})
-		return httpServer.Shutdown(ctx)
+		err := httpServer.Shutdown(ctx)
+		if err != nil {
+			application.LogInflightCut()
+			_ = httpServer.Close()
+		}
+		application.LogShutdownPhase("http_gateway", startedAt, err)
+		return err
 	})
 
 	return &Gateway{
@@ -101,6 +117,26 @@ func New(application *app.App, registerFunc func(ctx context.Context, mux *runti
 		tlsKeyFile:  cfg.HTTP.TLSKeyFile,
 		log:         log,
 	}, nil
+}
+
+func incomingHeaderMatcher(key string) (string, bool) {
+	lower := strings.ToLower(key)
+	switch {
+	case lower == "x-request-id", lower == "x-user-id", lower == "x-core-client-ip", lower == "x-core-user-agent", lower == "x-core-request-id-replaced", strings.HasPrefix(lower, "x-label-"):
+		return lower, true
+	default:
+		return runtime.DefaultHeaderMatcher(key)
+	}
+}
+
+func outgoingHeaderMatcher(key string) (string, bool) {
+	if strings.EqualFold(key, "x-request-id") {
+		return "X-Request-ID", true
+	}
+	if strings.EqualFold(key, "x-response-code") || strings.EqualFold(key, "grpc-metadata-x-response-code") {
+		return "X-Response-Code", true
+	}
+	return runtime.DefaultHeaderMatcher(key)
 }
 
 // Start runs the HTTP server.

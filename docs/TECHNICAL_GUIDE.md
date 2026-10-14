@@ -1,184 +1,73 @@
-# Panduan Teknis Lengkap `go-core`
+# Technical Guide
 
-Dokumen ini adalah ringkasan ramah-developer untuk memahami fitur apa saja yang dimiliki oleh `go-core`, apa yang bisa dikonfigurasi, dan bagaimana contoh implementasinya di *microservice* Anda.
+Panduan ini menjelaskan API yang tersedia pada source v1.1.0. Untuk perubahan dari v1.0.x, lihat `MIGRATION.md`.
 
----
+## Configuration And Startup
 
-## 1. Konfigurasi Sistem (`config/`)
-Semua *service* dikendalikan penuh oleh **Environment Variables (`.env`)**. `go-core` otomatis memvalidasi apakah variabel yang diwajibkan sudah diisi sebelum aplikasi menyala (Fail-Fast).
+`config.Load` membaca environment yang didukung dan `cfg.Validate()` memeriksa kombinasi nilainya. `SERVICE_NAME` dan `APP_ENV` wajib. Contoh environment yang aman ada di `.env.example`.
 
-**Variabel Utama:**
-- `SERVICE_NAME` (Wajib)
-- `APP_ENV` (Default: `dev`. Jika di-set `production`, log otomatis menjadi JSON tanpa warna)
-- `LOG_LEVEL` (Default: `info`)
-
-**Contoh Penggunaan:**
 ```go
 cfg, err := config.Load(config.WithDotEnv(".env"))
+if err != nil {
+    return err
+}
 if err := cfg.Validate(); err != nil {
-    panic(err)
+    return err
 }
 ```
 
----
+`migration.AutoRunUp(cfg)` adalah keputusan eksplisit milik service; `app.New` tidak menjalankan migrasi. Demikian pula, outbox worker tidak mulai otomatis.
 
-## 2. Jaringan & Server (`server/`)
-`go-core` menggunakan pola **Multiplexing**. Ia menjalankan **gRPC Server** (untuk komunikasi antar-backend) dan **HTTP API Gateway** (untuk komunikasi Frontend/Mobile) dari **1 file definisi Protobuf saja**.
+## HTTP And gRPC Servers
 
-**Variabel Konfigurasi:**
-- `GRPC_PORT` (Default: 50051)
-- `HTTP_PORT` (Default: 8080)
-- `HTTP_PPROF_ENABLED` (Default: false. Jika true, menyalakan `/debug/pprof` untuk mendeteksi kebocoran memori).
-- `GRPC_TLS_ENABLED` & `HTTP_TLS_ENABLED` (Untuk koneksi aman via SSL/TLS).
+Buat server melalui `server/grpc.New(application)` dan `server/gateway.New(application, registerFunc)`. Endpoint gRPC-Gateway harus mengarah ke server gRPC lokal (`RegisterXHandlerFromEndpoint`) supaya interceptor tetap dilewati.
 
-**Fitur Otomatis Gateway HTTP:**
-- **Success & Error Envelope:** Semua respons otomatis dibungkus dengan `{ "success": true/false, "trace_id": "...", "data": ... }`.
-- **Panic Recovery:** Server tidak akan mati meskipun kode Anda mengalami `panic()`.
-- **Health & Ready Endpoint:** Akses `/health` dan `/ready` otomatis terpasang.
+Gateway memasang `/health`, `/ready`, `/version`, `/metrics`, CORS allowlist, body limit, configured timeouts, request identity, and response envelopes. Successful API responses include `status`, `response_code`, `message`, `request_id`, `timestamp`, and `data`; failures use the same common fields and validation may include `details`. Operational endpoints bypass the API envelope. `CORE-1005` maps an oversized body to HTTP 413 / `ResourceExhausted`.
 
----
+Saat shutdown, `/ready` menjadi 503 dan gRPC health menjadi `NOT_SERVING`, kemudian `DrainDelay` (3s default) berjalan sebelum server dihentikan graceful di bawah `ShutdownTimeout` (25s default). `ShutdownTimeout + DrainDelay` sebaiknya muat dalam termination grace period.
 
-## 3. Database & Transaksi (`database/` dan `dbtx/`)
-Mendukung *koneksi jamak (Multiple Databases)* sekaligus dan menyediakan bantuan injeksi konteks agar kode transaksi tetap bersih.
+## Database And Transactions
 
-**Variabel Konfigurasi:**
-- `DB_LIST` (Contoh: `primary,ledger`. Menentukan nama alias database).
-- `DB_PRIMARY_DRIVER`, `DB_PRIMARY_HOST`, `DB_PRIMARY_USER`, `DB_PRIMARY_PASSWORD` (Kredensial spesifik per alias).
+SQL driver yang didukung: `sqlserver` dan `mysql`. `database.New(cfg, log, database.WithSlowQueryThreshold(time.Second))` mengembalikan wrapper yang menyediakan raw `*sql.DB` dan `Gorm()`.
 
-**Contoh Implementasi Transaksi Aman (`dbtx`):**
-```go
-// Di dalam Usecase/Service
-err := dbtx.WithTx(ctx, s.db, func(txCtx context.Context) error {
-    // Parameter txCtx ini secara ajaib menyimpan koneksi transaksi SQL!
-    repo.KurangiSaldo(txCtx, 1000)
-    repo.TambahSaldo(txCtx, 1000)
-    return nil // Otomatis Commit jika return nil, Otomatis Rollback jika error.
-})
-```
+Gunakan `dbtx.WithTx` pada batas use case dan `dbtx.FromContext` di repository. Untuk outbox, tulis event di transaksi bisnis yang sama, lalu biarkan worker service-owned menerbitkannya setelah commit.
 
----
+## Errors And Envelopes
 
-## 4. Keamanan & Autentikasi (`security/`)
-Menyediakan pencegat (*Interceptor*) yang menolak otomatis akses jika Token JWT kedaluwarsa atau tidak valid, tanpa perlu Anda tulis ulang di setiap *service*.
+Daftarkan definisi kode aplikasi dengan `errors.Register`. Buat error menggunakan `errors.New`, `errors.Wrap`, atau `errors.Validation`. Registry menentukan class, finality, retryability, HTTP status, dan gRPC status. Kode tidak terdaftar dipetakan ke `CORE-9000`; validasi `CORE-1000` dapat membawa field details.
 
-**Variabel Konfigurasi:**
-- `INTERNAL_JWT_ENABLED` (Jika true, semua endpoint gRPC akan memvalidasi Token).
-- `INTERNAL_JWT_PUBLIC_KEY` (Kunci RSA Publik untuk mencocokkan *signature*).
-- `INTERNAL_JWT_EXCLUDE_METHODS` (Contoh: `/user.Auth/Login`. Mengecualikan endpoint tertentu dari pengecekan JWT).
-- `AUTH_SIGNATURE_ENABLED` (Jika true, mencegah serangan *Replay Attack* dari HTTP Gateway).
+Gunakan `response.SetCode(ctx, code)` untuk mengirim response code dari handler gRPC kepada gateway. Gateway mengambil metadata itu dan tidak mengekspos header `x-response-code` ke klien HTTP.
 
----
+## Logging And Identity
 
-## 5. Observability & Logging (`logger/` & `observability/`)
-Mengatur agar jejak pencarian eror (Trace) dapat dengan mudah dilakukan oleh *Customer Support* dan *DevOps*.
+`logger.New(service, level, logger.WithEnvironment(...), logger.WithConfig(...))` membuat ECS JSON kecuali environment `local`, yang menggunakan console encoder. Database slow-query threshold dapat dikonfigurasi melalui `logger.Config` dan `database.WithSlowQueryThreshold`.
 
-**Variabel Konfigurasi:**
-- `OTEL_EXPORTER_OTLP_ENDPOINT` (Mengirim *trace* jarak jauh ke sistem seperti Jaeger/Datadog).
+Gateway membuat request field bag dan menangkap request ID, user agent, serta client IP berdasarkan `TrustedProxyHops`. `observability.SetUserID`, `SetLabel`, dan `RegisterPropagatedLabel` menyediakan identity. Satu request REST yang mencapai gRPC mendapat satu access log dari gRPC interceptor; gateway menulis access log hanya untuk kegagalan sebelum gRPC.
 
-**Contoh Implementasi Logging:**
-```go
-// 1. Log Teknis (Untuk DevOps, tidak butuh struktur kaku)
-s.log.Error(ctx, "koneksi database terputus", logger.Field{Key: "db", Value: "primary"})
+## Outbound Clients
 
-// 2. Log Bisnis (Untuk Audit Compliance/Security)
-s.log.LogEvent(ctx, logger.EventLog{
-    Category: "security_audit",
-    Action:   "reset_password",
-    ActorID:  "user-999",
-})
+### HTTP
 
-// 3. Log Keuangan Khusus Fintech (Untuk Analis Data / Finance)
-s.log.LogTransaction(ctx, logger.TransactionLog{
-    Operation: "topup_wallet",
-    Status:    "success",
-    Metadata:  map[string]interface{}{"amount": 50000},
-})
-```
+Retries off by default; opt in per client with `httpclient.WithRetry(resilience.DefaultRetryOptions())`. Every received HTTP response, including 5xx, is returned with `err == nil`. Transport failures are `*httpclient.TransportError{Phase, Kind, Err}`; phase reflects whether request headers were written. Logs contain a URL without query, fragment, or userinfo. Identity forwarding requires `httpclient.WithInternalPropagation()`. Body logging requires `WithBodyLogging(masker)` and no raw body is logged by default.
 
----
+### gRPC
 
-## 6. Integrasi Eksternal (Kafka, Redis, Memcached)
-Semua dependensi pihak ketiga dirancang bersifat **Opsional (Opt-In)**. Jika konfigurasi di-set `false`, `go-core` sama sekali tidak akan menelan memori untuk komponen tersebut.
+`grpcclient.NewClient(target, log, options...)` provides `Conn()`, `Close()`, `Dial(...)`, identity metadata propagation, OTel stats, call logs, keepalive, and a 30-second default deadline when the caller supplied none. Per-call metrics require `grpcclient.WithMetricsEnabled(true)`. Retries are disabled, including service-config retries. The default transport is plaintext to match the default server; supply `WithTransportCredentials(...)` for TLS. `ResponseCodeFromHeader` and `ErrorInfo` read go-core response metadata.
 
-**Variabel Konfigurasi:**
-- `REDIS_ENABLED` & `REDIS_ADDRESS`
-- `MEMCACHED_ENABLED` & `MEMCACHED_SERVERS`
-- `KAFKA_ENABLED` & `KAFKA_BROKERS`
+## Kafka, Outbox, And Audit Events
 
----
+Kafka supports SASL `PLAIN`, `SCRAM-SHA-256`, and `SCRAM-SHA-512`. The truststore loader autodetects JKS or PEM and returns a TLS config used by writers, readers, and readiness checks.
 
-## 7. Penanganan Error Standar (`errors/`)
-Ucapkan selamat tinggal pada error Go biasa `fmt.Errorf()`. Semua layanan mewajibkan tipe data *ErrorBuilder* terstruktur.
+Consumer concurrency is keyed by partition: a partition has one FIFO worker, and a failed offset blocks later offsets unless a successful DLQ publication allows it to commit. DLQ records preserve headers and add `x-dlq-reason` and `x-original-topic`.
 
-**Contoh Implementasi Error:**
-```go
-if nominal <= 0 {
-    return coreErrors.Build("TRF", coreErrors.CategoryVAL, "001").
-        Message("nominal transfer negatif").            // Log teknis rahasia (disembunyikan)
-        UserMessage("Nominal transfer tidak valid!").   // Dikirim ke layar HP
-        Finality(coreErrors.FinalityBusiness).          // Jangan di-retry
-        Done()
-}
-```
+`messaging/outbox.Publisher.PublishTx` stores a UUID `event_id` with identity row `id`. A worker claims per key under a short lease transaction, publishes outside it, and stores `SENT`, retry/backoff, or `DEAD`. DDL is in `docs/MESSAGING_PATTERN.md`.
 
----
+`outbox.Publisher.PublishAudit` validates CloudEvents 1.0 including `ce_sequence`; the subject is the Kafka key and `ce_id` is the outbox ID. It logs metadata only. Consumers can access restored headers with `messaging.CloudEventsFromContext(ctx)`.
 
-## 8. Migrasi Skema Database Otomatis (`migration/`)
-Digunakan untuk mengeksekusi perubahan tabel *database* (seperti `CREATE TABLE`, `ALTER`) saat aplikasi pertama kali menyala (menggunakan basis `goose`).
+## Diagnostics And Release Gaps
 
-**Variabel Konfigurasi:**
-- `MIGRATION_AUTO_RUN` (Jika `true`, aplikasi akan menjalankan migrasi sebelum server HTTP/gRPC diizinkan menyala).
-- `MIGRATION_DB` (Menunjuk alias database mana yang akan dimigrasi, contoh: `primary`).
-- `MIGRATION_DIR` (Folder tempat file SQL disimpan, misal: `migrations/primary`).
-- `MIGRATION_LOCK_ENABLED` (Otomatis mencegah *race condition* jika aplikasi Anda di-deploy ke banyak K8s Pod sekaligus).
+`DIAG_ENABLED=true` enables bounded runtime diagnostics (goroutine threshold 5000, heap threshold 80% of cgroup memory, 10m cooldown, 30s check interval). Snapshots contain function/file locations and numeric stats only.
 
----
+Tracing is OpenTelemetry OTLP to Elastic APM Server via `APM_ENDPOINT`; no Elastic APM agent is used and logs do not include `transaction.id`. Metrics are disabled by default; set `METRICS_ENABLED=true` to record metrics and register `/metrics`. `app_transaction_total` is removed.
 
-## 9. Pemanggilan Eksternal yang Kebal (*Resilience & HTTP Client*)
-Ketika aplikasi Anda memanggil API pihak ketiga (misal: API Bank atau Payment Gateway), koneksi sangat rentan terhadap gangguan. `go-core` menyediakan modul `resilience/` dan `httpclient/` untuk melindunginya.
-
-**Fitur HTTP Client (`httpclient/`):**
-- **Otomatis Retry:** Jika API Bank mengembalikan HTTP 500, *client* akan mencoba ulang secara otomatis (dengan pola penundaan *Backoff*).
-- **Circuit Breaker:** Jika API Bank mati total, *client* akan memutus sirkuit (*Fail-Fast*) agar server Anda tidak kehabisan RAM karena menunggu koneksi bodong.
-- **Auto-Trace:** Otomatis membawa ID Pelacakan (OTEL/Trace ID) agar mudah ditelusuri dari *Dashboard*.
-
-**Contoh Implementasi:**
-```go
-client := httpclient.New(httpclient.Options{
-    Timeout:      5 * time.Second,
-    MaxRetries:   3,
-    EnableBreaker: true,
-})
-resp, err := client.Do(ctx, req) // Otomatis Retry jika gagal!
-```
-
----
-
-## 10. Pola Pesan Asinkron (*Messaging & Outbox Pattern*)
-Selain integrasi Kafka standar (`messaging/`), `go-core` memfasilitasi pola **Outbox** (`messaging/outbox/`). 
-Fitur ini mencegah hilangnya *event* ke Kafka saat *database* Anda berhasil di-*commit*, namun tiba-tiba listrik padam sebelum *event* sempat terkirim. *Outbox Worker* akan secara mandiri memastikannya terkirim (*At-Least-Once Delivery*).
-
----
-
-## Ringkasan Alur Startup Standar di Service
-Inilah cara setiap *microservice* Anda kelak dijalankan menggunakan komponen-komponen di atas:
-
-```go
-func main() {
-    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-    defer stop()
-
-    // 1. Muat Config
-    cfg, _ := coreconfig.Load(coreconfig.WithDotEnv(".env"))
-    
-    // 2. Siapkan Wadah Aplikasi (Otomatis init Logger, DB, Kafka, dll)
-    application, _ := coreapp.New(ctx, cfg)
-    
-    // 3. Bangun Server Transport
-    grpcServer, _ := coregrpc.New(application)
-    gatewayServer, _ := coregateway.New(application, func(...) { /* Register Handler */ })
-    
-    // 4. Jalankan! (Otomatis mengurus Graceful Shutdown saat Ctrl+C ditekan)
-    coreserver.Run(ctx, application, grpcServer, gatewayServer)
-}
-```
+Downstream forks may adjust the module path before adoption. `Q-SIG` confirmation is deferred but is not a release blocker. Keep `go 1.24.3` in `go.mod`; the current build image uses Go 1.24.13 and the next upgrade target is Go 1.26.x.

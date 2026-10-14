@@ -2,11 +2,16 @@ package httpclient
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/yogayulanda/go-core/logger"
+	"github.com/yogayulanda/go-core/observability"
 	"github.com/yogayulanda/go-core/resilience"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -33,12 +38,18 @@ func NewClient(log logger.Logger, options ...Option) *Client {
 	if opts.Debug {
 		restyClient.SetDebug(true)
 	}
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		baseTransport = &http.Transport{}
+	}
+	transport := baseTransport.Clone()
+	transport.IdleConnTimeout = opts.IdleConnTimeout
+	var roundTripper http.RoundTripper = transport
 
 	if opts.EnableTracing {
-		// Use otelhttp transport to automatically propagate tracing headers
-		transport := otelhttp.NewTransport(http.DefaultTransport)
-		restyClient.SetTransport(transport)
+		roundTripper = otelhttp.NewTransport(roundTripper)
 	}
+	restyClient.SetTransport(roundTripper)
 
 	if opts.RetryOptions != nil {
 		restyClient.SetRetryCount(opts.RetryOptions.MaxAttempts)
@@ -53,39 +64,15 @@ func NewClient(log logger.Logger, options ...Option) *Client {
 		})
 	}
 
-	restyClient.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
-		reqCtx := req.Context()
-		if reqCtx == nil {
-			reqCtx = context.Background()
+	restyClient.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
+		if state, ok := req.Context().Value(httpTraceStateKey{}).(*httpTraceState); ok {
+			state.wroteHeaders.Store(false)
+			trace := newHTTPTrace(state)
+			req.SetContext(httptraceContext(req.Context(), trace))
 		}
-
-		log.LogService(reqCtx, logger.ServiceLog{
-			Operation: "httpclient_request",
-			Status:    "started",
-			Metadata: map[string]interface{}{
-				"method": req.Method,
-				"url":    req.URL,
-			},
-		})
-		return nil
-	})
-
-	restyClient.OnAfterResponse(func(c *resty.Client, resp *resty.Response) error {
-		reqCtx := resp.Request.Context()
-		if reqCtx == nil {
-			reqCtx = context.Background()
+		if opts.InternalPropagation {
+			propagateIdentity(req, req.Context())
 		}
-
-		log.LogService(reqCtx, logger.ServiceLog{
-			Operation:  "httpclient_response",
-			Status:     "success",
-			DurationMs: resp.Time().Milliseconds(),
-			Metadata: map[string]interface{}{
-				"method":      resp.Request.Method,
-				"url":         resp.Request.URL,
-				"status_code": resp.StatusCode(),
-			},
-		})
 		return nil
 	})
 
@@ -110,18 +97,25 @@ func (c *Client) Request() *resty.Request {
 
 // Do executes a Resty request synchronously using context and wrapped inside CircuitBreaker.
 func (c *Client) Do(ctx context.Context, req *resty.Request, method, url string) (*resty.Response, error) {
+	ctx = observability.EnsureFieldBag(ctx)
+	traceState := &httpTraceState{}
+	ctx = context.WithValue(ctx, httpTraceStateKey{}, traceState)
 	req.SetContext(ctx)
+	start := time.Now()
 
 	var resp *resty.Response
 	var err error
+	var transportErr error
+	var receivedServerError bool
 
 	fn := func(ctx context.Context) error {
 		resp, err = req.Execute(method, url)
 		if err != nil {
+			transportErr = err
 			return err
 		}
 		if resp.StatusCode() >= 500 {
-			// Trigger circuit breaker on server errors
+			receivedServerError = true
 			return fmt.Errorf("http client error: %d", resp.StatusCode())
 		}
 		return nil
@@ -132,8 +126,112 @@ func (c *Client) Do(ctx context.Context, req *resty.Request, method, url string)
 	} else {
 		err = fn(ctx)
 	}
+	if transportErr != nil {
+		err = transportErr
+	}
 
-	return resp, err
+	if receivedServerError && transportErr == nil && resp != nil {
+		err = nil
+	}
+	var resultErr error
+	if err != nil {
+		var kind Kind
+		if errors.Is(err, resilience.ErrCircuitOpen) || errors.Is(err, resilience.ErrTooManyRequests) {
+			kind = TransportKindCircuitOpen
+			transportErr = err
+		} else {
+			if transportErr == nil {
+				transportErr = err
+			}
+			kind = classifyTransportKind(transportErr)
+		}
+		resultErr = &TransportError{Phase: transportPhase(traceState.wroteHeaders.Load()), Kind: kind, Err: transportErr}
+	}
+	if resultErr != nil && resp != nil && resp.RawResponse == nil {
+		resp = nil
+	}
+	logHTTPCall(c.log, ctx, req, method, url, resp, resultErr, time.Since(start), c.opts)
+	return resp, resultErr
+}
+
+func propagateIdentity(req *resty.Request, ctx context.Context) {
+	if requestID := observability.GetRequestID(ctx); requestID != "" && req.Header.Get("X-Request-ID") == "" {
+		req.SetHeader("X-Request-ID", requestID)
+	}
+	if userID := observability.GetUserID(ctx); userID != "" && req.Header.Get("X-User-ID") == "" {
+		req.SetHeader("X-User-ID", userID)
+	}
+	labels := observability.Labels(ctx)
+	for _, name := range observability.PropagatedLabels() {
+		if value := labels[name]; value != "" && req.Header.Get(observability.LabelMetadataPrefix+name) == "" {
+			req.SetHeader(observability.LabelMetadataPrefix+name, value)
+		}
+	}
+}
+
+func logHTTPCall(log logger.Logger, ctx context.Context, req *resty.Request, method, rawURL string, resp *resty.Response, callErr error, duration time.Duration, opts ClientOptions) {
+	status := "failed"
+	metadata := map[string]interface{}{"method": method, "url": sanitizedURL(rawURL), "duration_ms": duration.Milliseconds()}
+	if resp != nil {
+		metadata["status_code"] = resp.StatusCode()
+		if resp.StatusCode() < http.StatusBadRequest {
+			status = "success"
+		}
+	}
+	if callErr != nil {
+		status = "failed"
+		var transportError *TransportError
+		if errors.As(callErr, &transportError) {
+			metadata["phase"] = string(transportError.Phase)
+			metadata["kind"] = string(transportError.Kind)
+		}
+	}
+	if opts.BodyLogging && opts.BodyMasker != nil {
+		requestBody := req.Body
+		if resp != nil && resp.Request != nil {
+			requestBody = resp.Request.Body
+		}
+		if body := maskedBody(requestBody, opts.BodyMasker); body != "" {
+			metadata["request_body"] = body
+		}
+		if resp != nil {
+			if body := string(opts.BodyMasker(append([]byte(nil), resp.Body()...))); body != "" {
+				metadata["response_body"] = body
+			}
+		}
+	}
+	log.LogService(ctx, logger.ServiceLog{Operation: "httpclient_call", Status: status, DurationMs: duration.Milliseconds(), Metadata: metadata})
+}
+
+func sanitizedURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "<invalid-url>"
+	}
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	parsed.User = nil
+	return parsed.String()
+}
+
+func maskedBody(value interface{}, masker func([]byte) []byte) string {
+	var raw []byte
+	switch body := value.(type) {
+	case nil:
+		return ""
+	case []byte:
+		raw = append([]byte(nil), body...)
+	case string:
+		raw = []byte(body)
+	default:
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return ""
+		}
+		raw = encoded
+	}
+	return string(masker(raw))
 }
 
 // Get is a convenience method for simple GET requests.

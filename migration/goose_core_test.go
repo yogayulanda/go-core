@@ -114,6 +114,9 @@ func TestGooseDialect_Driver_ReturnExpectedDialect(t *testing.T) {
 	if got := GooseDialect(" MySQL "); got != "mysql" {
 		t.Fatalf("expected mysql, got %q", got)
 	}
+	if got := GooseDialect("postgres"); got != "" {
+		t.Fatalf("expected unsupported dialect to be empty, got %q", got)
+	}
 }
 
 func TestRunGoose_InvalidAction_ReturnError(t *testing.T) {

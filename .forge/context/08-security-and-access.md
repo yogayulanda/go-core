@@ -21,6 +21,10 @@
 - Gateway middleware can enforce request-signature validation when `AUTH_SIGNATURE_ENABLED` is set.
 - Docs require that secrets and raw tokens never be exposed in logs or returned errors.
 - gRPC startup logs auth configuration mode for operator visibility, while client-facing failures stay sanitized as unauthorized responses.
+- HTTP identity propagation is the caller's responsibility: `httpclient.WithInternalPropagation()` forwards identity headers but does not validate the destination host. This is an accepted trust-boundary risk (`GC-27`); use the option only for trusted internal destinations.
+- Kafka consumers restore request/user/registered-label identity from message headers. Trust is based on the internal Kafka network and producer controls, not per-message identity authentication; this is an accepted risk (`GC-27`).
+- Kafka password and JKS/PEM trust material are secrets. Truststore contents are parsed in `messaging/internal/kafkatls` and are not logged.
+- Diagnostic snapshots contain bounded function/file locations and numeric runtime data; goroutine arguments are not collected.
 
 ## Assumptions
 - Authorization roles and service-specific permission semantics are consumer-service responsibilities, not foundation-owned rules.

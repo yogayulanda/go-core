@@ -3,8 +3,10 @@ package messaging
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -101,7 +103,7 @@ func TestKafkaPublisher_ObservabilitySuccess(t *testing.T) {
 	}
 
 	log := &testLogger{}
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	pub, err := NewKafkaPublisher(
 		config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}},
 		WithPublisherLogger(log),
@@ -129,6 +131,19 @@ func TestKafkaPublisher_ObservabilitySuccess(t *testing.T) {
 	}
 }
 
+func TestMessagingMetricRecordingDisabledByDefault(t *testing.T) {
+	disabled := observability.NewMetrics(false)
+	observeMessagePublish(publisherConfig{metrics: disabled, serviceName: "metrics-disabled-test"}, "topic", "success")
+	if got := testutil.ToFloat64(disabled.MessagePublishTotal.WithLabelValues("metrics-disabled-test", "topic", "success")); got != 0 {
+		t.Fatalf("disabled metrics recorded a publish: %v", got)
+	}
+	enabled := observability.NewMetrics(true)
+	observeMessagePublish(publisherConfig{metrics: enabled, serviceName: "metrics-enabled-test"}, "topic", "success")
+	if got := testutil.ToFloat64(enabled.MessagePublishTotal.WithLabelValues("metrics-enabled-test", "topic", "success")); got != 1 {
+		t.Fatalf("enabled metrics did not record a publish: %v", got)
+	}
+}
+
 func TestKafkaPublisher_ObservabilityFailureAndDLQ(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -145,6 +160,7 @@ func TestKafkaPublisher_ObservabilityFailureAndDLQ(t *testing.T) {
 			defer func() { newKafkaWriter = originalFactory }()
 
 			call := 0
+			dlqHeaders := make(map[string]string)
 			newKafkaWriter = func(cfg config.KafkaConfig) kafkaMessageWriter {
 				return stubKafkaWriter{
 					writeFunc: func(ctx context.Context, msgs ...kafka.Message) error {
@@ -152,13 +168,16 @@ func TestKafkaPublisher_ObservabilityFailureAndDLQ(t *testing.T) {
 						if call == 1 {
 							return errors.New("publish failed")
 						}
+						for _, header := range msgs[0].Headers {
+							dlqHeaders[header.Key] = string(header.Value)
+						}
 						return tt.dlqErr
 					},
 				}
 			}
 
 			log := &testLogger{}
-			metrics := observability.NewMetrics()
+			metrics := observability.NewMetrics(true)
 			serviceName := "publisher-failure-test-" + strings.ReplaceAll(tt.name, " ", "-")
 			pub, err := NewKafkaPublisher(
 				config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}},
@@ -174,9 +193,13 @@ func TestKafkaPublisher_ObservabilityFailureAndDLQ(t *testing.T) {
 				Topic:   "record.failed",
 				Key:     []byte("k"),
 				Payload: []byte("v"),
+				Headers: map[string]string{"original": "kept"},
 			})
 			if err == nil {
 				t.Fatalf("expected publish error")
+			}
+			if dlqHeaders["original"] != "kept" || dlqHeaders["x-original-topic"] != "record.failed" || dlqHeaders["x-dlq-reason"] == "" {
+				t.Fatalf("DLQ headers were not preserved/enriched: %#v", dlqHeaders)
 			}
 
 			if got := testutil.ToFloat64(metrics.MessagePublishTotal.WithLabelValues(serviceName, "record.failed", "failed")); got != 1 {
@@ -200,7 +223,7 @@ func TestKafkaConsumer_ObservabilitySuccess(t *testing.T) {
 	defer cancel()
 
 	fetchCount := 0
-	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string) kafkaMessageReader {
+	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string, _ *log.Logger, _ *kafka.Dialer) kafkaMessageReader {
 		return stubKafkaReader{
 			fetchFunc: func(ctx context.Context) (kafka.Message, error) {
 				fetchCount++
@@ -214,7 +237,7 @@ func TestKafkaConsumer_ObservabilitySuccess(t *testing.T) {
 	}
 
 	log := &testLogger{}
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	consumer, err := NewKafkaConsumer(
 		config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}},
 		"record.created",
@@ -243,6 +266,65 @@ func TestKafkaConsumer_ObservabilitySuccess(t *testing.T) {
 	}
 }
 
+func TestKafkaConsumer_ProcessesAndCommitsPartitionOffsetsInOrder(t *testing.T) {
+	originalFactory := newKafkaReader
+	defer func() { newKafkaReader = originalFactory }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var fetchMu sync.Mutex
+	fetchIndex := 0
+	var commitMu sync.Mutex
+	var committed []int64
+	newKafkaReader = func(_ config.KafkaConfig, topic, _ string, _ *log.Logger, _ *kafka.Dialer) kafkaMessageReader {
+		return stubKafkaReader{
+			fetchFunc: func(ctx context.Context) (kafka.Message, error) {
+				fetchMu.Lock()
+				defer fetchMu.Unlock()
+				fetchIndex++
+				if fetchIndex <= 2 {
+					return kafka.Message{Topic: topic, Partition: 3, Offset: int64(fetchIndex), Value: []byte{byte(fetchIndex)}}, nil
+				}
+				<-ctx.Done()
+				return kafka.Message{}, ctx.Err()
+			},
+			commitFunc: func(_ context.Context, messages ...kafka.Message) error {
+				commitMu.Lock()
+				committed = append(committed, messages[0].Offset)
+				if len(committed) == 2 {
+					cancel()
+				}
+				commitMu.Unlock()
+				return nil
+			},
+		}
+	}
+	var active atomic.Int32
+	var handlerMu sync.Mutex
+	var handled []int
+	consumer, err := NewKafkaConsumer(config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}}, "ordered", "ordered-group", func(_ context.Context, message Message) error {
+		if active.Add(1) != 1 {
+			t.Error("same partition messages were handled concurrently")
+		}
+		handlerMu.Lock()
+		handled = append(handled, int(message.Payload[0]))
+		handlerMu.Unlock()
+		active.Add(-1)
+		return nil
+	}, WithConsumerConcurrency(4))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := consumer.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(handled) != 2 || handled[0] != 1 || handled[1] != 2 {
+		t.Fatalf("partition handler order was not preserved: %v", handled)
+	}
+	if len(committed) != 2 || committed[0] != 1 || committed[1] != 2 {
+		t.Fatalf("partition commit order was not preserved: %v", committed)
+	}
+}
+
 func TestKafkaConsumer_ObservabilityCommitFailed(t *testing.T) {
 	originalFactory := newKafkaReader
 	defer func() { newKafkaReader = originalFactory }()
@@ -251,7 +333,7 @@ func TestKafkaConsumer_ObservabilityCommitFailed(t *testing.T) {
 	defer cancel()
 
 	fetchCount := 0
-	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string) kafkaMessageReader {
+	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string, _ *log.Logger, _ *kafka.Dialer) kafkaMessageReader {
 		return stubKafkaReader{
 			fetchFunc: func(ctx context.Context) (kafka.Message, error) {
 				fetchCount++
@@ -269,7 +351,7 @@ func TestKafkaConsumer_ObservabilityCommitFailed(t *testing.T) {
 	}
 
 	log := &testLogger{}
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	consumer, err := NewKafkaConsumer(
 		config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}},
 		"record.failed",
@@ -302,7 +384,7 @@ func TestKafkaConsumer_ObservabilityDLQSuccessAndFetchFailed(t *testing.T) {
 	defer cancel()
 
 	fetchCount := 0
-	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string) kafkaMessageReader {
+	newKafkaReader = func(cfg config.KafkaConfig, topic string, groupID string, _ *log.Logger, _ *kafka.Dialer) kafkaMessageReader {
 		return stubKafkaReader{
 			fetchFunc: func(ctx context.Context) (kafka.Message, error) {
 				fetchCount++
@@ -320,7 +402,7 @@ func TestKafkaConsumer_ObservabilityDLQSuccessAndFetchFailed(t *testing.T) {
 	}
 
 	log := &testLogger{}
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(true)
 	consumer, err := NewKafkaConsumer(
 		config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}},
 		"record.dlq",

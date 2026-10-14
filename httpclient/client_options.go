@@ -8,26 +8,30 @@ import (
 
 // ClientOptions holds the configuration for the HTTP Client.
 type ClientOptions struct {
-	Timeout        time.Duration
-	RetryOptions   *resilience.RetryOptions
-	CircuitBreaker *resilience.CircuitBreakerOptions
-	Debug          bool
-	UserAgent      string
-	EnableTracing  bool
+	Timeout             time.Duration
+	IdleConnTimeout     time.Duration
+	RetryOptions        *resilience.RetryOptions
+	CircuitBreaker      *resilience.CircuitBreakerOptions
+	Debug               bool
+	UserAgent           string
+	EnableTracing       bool
+	InternalPropagation bool
+	BodyLogging         bool
+	BodyMasker          func([]byte) []byte
 }
 
 // DefaultClientOptions provides sensible defaults for the HTTP client.
 func DefaultClientOptions() ClientOptions {
-	retryOpts := resilience.DefaultRetryOptions()
 	cbOpts := resilience.DefaultCircuitBreakerOptions("http-client-cb")
 
 	return ClientOptions{
-		Timeout:        30 * time.Second,
-		RetryOptions:   &retryOpts,
-		CircuitBreaker: &cbOpts,
-		Debug:          false,
-		UserAgent:      "go-core-http-client/1.0",
-		EnableTracing:  true,
+		Timeout:         30 * time.Second,
+		IdleConnTimeout: 30 * time.Second,
+		RetryOptions:    nil,
+		CircuitBreaker:  &cbOpts,
+		Debug:           false,
+		UserAgent:       "go-core-http-client/1.0",
+		EnableTracing:   true,
 	}
 }
 
@@ -40,9 +44,33 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
-func WithRetryOptions(opts resilience.RetryOptions) Option {
+func WithIdleConnTimeout(timeout time.Duration) Option {
+	return func(o *ClientOptions) {
+		o.IdleConnTimeout = timeout
+	}
+}
+
+func WithRetry(opts resilience.RetryOptions) Option {
 	return func(o *ClientOptions) {
 		o.RetryOptions = &opts
+	}
+}
+
+func WithInternalPropagation() Option {
+	return func(o *ClientOptions) {
+		o.InternalPropagation = true
+	}
+}
+
+func WithBodyLogging(masker func([]byte) []byte) Option {
+	return func(o *ClientOptions) {
+		if masker == nil {
+			o.BodyLogging = false
+			o.BodyMasker = nil
+			return
+		}
+		o.BodyLogging = true
+		o.BodyMasker = masker
 	}
 }
 

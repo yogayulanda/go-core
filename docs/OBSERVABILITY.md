@@ -1,52 +1,29 @@
 # Observability
 
-This document describes the stable `v1` observability baseline for `go-core`.
+This document describes the implemented observability behavior. Dashboard/backend policy decisions still open in the SDD are identified separately.
 
-Logs:
-- structured keys
-- include `request_id`
-- redact sensitive data
-- use `logger.ServiceLog` for structured normal service flow
-- use `logger.DBLog` for structured DB operational/query logging
-- use `logger.TransactionLog` only for transaction-oriented services that follow the shared transaction monitoring contract
-- runtime orchestration emits `ServiceLog` for `app_init`, `app_runtime`, `lifecycle_shutdown`, `shutdown_hook`, and `runtime_orchestration`
-- startup readiness emits `ServiceLog` for `grpc_readiness`, `http_gateway_readiness`, and `service_readiness`
-- gRPC transport emits `ServiceLog` for `grpc_request`
-- HTTP gateway emits `ServiceLog` for `http_request`
-- messaging publisher emits `ServiceLog` for `message_publish`
-- messaging consumer emits `ServiceLog` for `message_consume`
-- outbox runtime emits `ServiceLog` for `outbox_worker` and `outbox_batch`
+## Logs
 
-Metrics:
-- request count + latency (HTTP/gRPC)
-- service operation count + latency via:
-  `app_service_operation_total{service,operation,status}`
-  `app_service_operation_duration_seconds{service,operation}`
-- DB operation count + latency via:
-  `app_db_operation_total{service,db_name,operation,status}`
-  `app_db_operation_duration_seconds{service,db_name,operation}`
-- messaging publish count via:
-  `app_message_publish_total{service,topic,status}`
-- messaging consume count + processing duration via:
-  `app_message_consume_total{service,topic,group,status}`
-  `app_message_process_duration_seconds{service,topic,group}`
-- outbox batch count + duration + size via:
-  `app_outbox_batch_total{service,status}`
-  `app_outbox_batch_duration_seconds{service}`
-  `app_outbox_batch_size{service}`
-- optional transaction counters via `app_transaction_total{service,operation,status}` for transaction-oriented services
+- ECS JSON is used outside `APP_ENV=local`; local uses a console encoder.
+- Context identity is injected as `labels.request_id`, `labels.gtid`, `user.id`, `client.ip`, and `user_agent.original` when present.
+- Service/database/event/transaction log-contract fields use `app.*`; event identity uses ECS `event.*`.
+- A normal REST request that reaches the local gRPC service produces exactly one access log from the gRPC interceptor. The gateway HTTP metrics middleware records metrics only. Gateway access logs are reserved for failures before gRPC (for example body-limit, signature, panic, or routing failures).
+- `/health`, `/ready`, `/metrics`, `/version`, and gRPC health checks are not logged as access requests unless they fail.
 
-Current transport/runtime mapping:
-- gRPC increments request metrics and additive service metrics for `grpc_request`
-- HTTP gateway increments HTTP metrics and additive service metrics for `http_request`
-- DB initialization paths use `DBLog`; DB metrics remain available for callers that want stable DB instrumentation
-- messaging publisher/consumer now use additive messaging counters and `ServiceLog`
-- outbox worker now records explicit batch outcomes instead of silent empty/failure paths
+## Metrics
 
-Tracing:
-- OTEL optional
-- propagate context across layers
+- `app_http_request_total{service,method,route,status}` and `app_http_request_duration_seconds{service,method,route}`.
+- The `route` label comes from the matched grpc-gateway `runtime.Pattern`; unmatched paths use the constant `unmatched`. Raw request paths are not used as labels.
+- Metrics are recorded and `/metrics` serves scrape data only when `METRICS_ENABLED=true`; default is false. Disabled requests receive 404.
+- When enabled, service, database, messaging, outbox and gRPC request metric families are exposed on `/metrics`.
+- `app_transaction_total` has been removed.
 
-See also:
-- `docs/TRANSACTION_OBSERVABILITY.md`
-- `docs/MESSAGING_PATTERN.md`
+## Tracing
+
+Tracing uses the existing OpenTelemetry SDK and OTLP gRPC exporter to Elastic APM Server, enabled by `APM_ENDPOINT`. No Elastic APM Go agent is used. `transaction.id` does not appear in logs.
+
+## Runtime Diagnostics
+
+`DIAG_ENABLED` defaults to true. The watcher performs periodic runtime-metric and goroutine-count checks. It emits one `diagnostic_snapshot` warning when the goroutine threshold or cgroup heap threshold is reached, subject to a shared cooldown. If cgroup memory is unavailable or unlimited, heap triggering is disabled and reported once; the goroutine trigger remains active. Snapshots contain bounded function/file locations and numeric stats, never goroutine arguments.
+
+Defaults: heap threshold 80%, goroutine threshold 5000, cooldown 10 minutes, check interval 30 seconds.

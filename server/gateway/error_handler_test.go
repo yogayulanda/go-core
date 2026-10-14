@@ -31,6 +31,7 @@ func TestCustomErrorHandler_ValidationError_CompactBodyWithDetails(t *testing.T)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/example", nil)
 	ctx := observability.WithRequestID(req.Context(), "req-123")
+	req.Header.Set(requestIDHeader, "req-123")
 
 	handler(
 		ctx,
@@ -48,12 +49,12 @@ func TestCustomErrorHandler_ValidationError_CompactBodyWithDetails(t *testing.T)
 		t.Fatalf("unexpected x-request-id: %s", got)
 	}
 
-	var body coreErrors.ErrorResponse
+	var body gatewayEnvelope
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal response failed: %v", err)
 	}
-	if body.Code != string(coreErrors.CodeInvalidRequest) {
-		t.Fatalf("unexpected code: %s", body.Code)
+	if body.ResponseCode != "CORE-1000" {
+		t.Fatalf("unexpected code: %s", body.ResponseCode)
 	}
 	if body.Message != "invalid request" {
 		t.Fatalf("unexpected message: %s", body.Message)
@@ -61,11 +62,11 @@ func TestCustomErrorHandler_ValidationError_CompactBodyWithDetails(t *testing.T)
 	if len(body.Details) != 1 {
 		t.Fatalf("expected 1 detail, got %d", len(body.Details))
 	}
-	if body.Success != false {
-		t.Fatalf("expected success: false")
+	if body.Status != "FAILED" {
+		t.Fatalf("expected FAILED, got %s", body.Status)
 	}
-	if body.TraceID != "req-123" {
-		t.Fatalf("expected trace_id req-123, got %s", body.TraceID)
+	if body.RequestID != "req-123" {
+		t.Fatalf("expected request_id req-123, got %s", body.RequestID)
 	}
 	if body.Timestamp == "" {
 		t.Fatalf("expected timestamp, got empty")
@@ -100,12 +101,12 @@ func TestCustomErrorHandler_UnknownGRPCError_IsSanitized(t *testing.T) {
 		t.Fatalf("expected 500, got %d", rec.Code)
 	}
 
-	var body coreErrors.ErrorResponse
+	var body gatewayEnvelope
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal response failed: %v", err)
 	}
-	if body.Code != string(coreErrors.CodeInternal) {
-		t.Fatalf("unexpected code: %s", body.Code)
+	if body.ResponseCode != "CORE-9000" {
+		t.Fatalf("unexpected code: %s", body.ResponseCode)
 	}
 	if body.Message != "internal server error" {
 		t.Fatalf("unexpected message: %s", body.Message)
@@ -115,7 +116,7 @@ func TestCustomErrorHandler_UnknownGRPCError_IsSanitized(t *testing.T) {
 	}
 }
 
-func TestCustomErrorHandler_DirectAppError_UsesCanonicalContract(t *testing.T) {
+func TestCustomErrorHandler_DirectAppError_UsesRegistryContract(t *testing.T) {
 	application := newTestApp(t, &config.Config{
 		App: config.AppConfig{
 			ServiceName:     "gateway-error-handler-test",
@@ -136,21 +137,74 @@ func TestCustomErrorHandler_DirectAppError_UsesCanonicalContract(t *testing.T) {
 		nil,
 		rec,
 		req,
-		coreErrors.New(coreErrors.CodeSessionExpired, ""),
+		coreErrors.New("CORE-1002", ""),
 	)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rec.Code)
 	}
 
-	var body coreErrors.ErrorResponse
+	var body gatewayEnvelope
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal response failed: %v", err)
 	}
-	if body.Code != string(coreErrors.CodeSessionExpired) {
-		t.Fatalf("unexpected code: %s", body.Code)
+	if body.ResponseCode != "CORE-1002" {
+		t.Fatalf("unexpected code: %s", body.ResponseCode)
 	}
 	if body.Message != "session expired" {
 		t.Fatalf("unexpected message: %s", body.Message)
+	}
+}
+
+func TestCustomErrorHandler_RegisteredHTTPStatusOverridesGRPCDefault(t *testing.T) {
+	const responseCode = "TEST-FAILED-422"
+	if err := coreErrors.Register(coreErrors.Def{
+		Code:           responseCode,
+		Class:          coreErrors.ClassFailed,
+		HTTPStatus:     http.StatusUnprocessableEntity,
+		GRPCCode:       codes.InvalidArgument,
+		Finality:       coreErrors.FinalityBusiness,
+		DefaultMessage: "business rule failed",
+	}); err != nil {
+		t.Fatalf("register test code: %v", err)
+	}
+
+	application := newTestApp(t, &config.Config{
+		App:       config.AppConfig{ServiceName: "gateway-422-test", Environment: "dev", LogLevel: "error", ShutdownTimeout: time.Second},
+		Databases: map[string]config.DBConfig{},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/example", nil)
+	customErrorHandler(application)(context.Background(), runtime.NewServeMux(), nil, rec, req, coreErrors.ToGRPC(coreErrors.New(responseCode, "technical")))
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected HTTP 422 from registry, got %d", rec.Code)
+	}
+	var body gatewayEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if body.ResponseCode != responseCode || body.Message != "business rule failed" {
+		t.Fatalf("unexpected response: %+v", body)
+	}
+}
+
+func TestCustomErrorHandler_UnregisteredAppCodeMapsInternal(t *testing.T) {
+	application := newTestApp(t, &config.Config{
+		App:       config.AppConfig{ServiceName: "gateway-unknown-code-test", Environment: "dev", LogLevel: "error", ShutdownTimeout: time.Second},
+		Databases: map[string]config.DBConfig{},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/example", nil)
+	customErrorHandler(application)(context.Background(), runtime.NewServeMux(), nil, rec, req, coreErrors.New("CUSTOM-UNKNOWN", "internal detail"))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected HTTP 500, got %d", rec.Code)
+	}
+	var body gatewayEnvelope
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if body.ResponseCode != "CORE-9000" || body.Message != "internal server error" {
+		t.Fatalf("unexpected unregistered-code response: %+v", body)
 	}
 }

@@ -17,9 +17,13 @@
 - Q-001: Which human/team is the current approval authority for durable context changes and semver-impacting contract changes? The repo docs describe process expectations but do not name owners.
 - Q-002: Are there additional current ADRs or decision records outside this repository that govern platform-standard contract additions beyond the documented `TransactionLog` example?
 - Q-003: Should `INTERNAL_JWT_ENABLED=true` support JWKS-only runtime configuration without `INTERNAL_JWT_PUBLIC_KEY`, or should docs and context continue to treat the public key as required until validation changes?
+- Q-004: Which Kafka SASL mechanism and deployment termination grace period should the adopting environment use?
+- Q-005: Run the tagged SQL Server/MySQL outbox integration tests against disposable real databases; neither backend has yet been verified against a live database.
 
 ## Confirmed Facts
 - Consuming services own their business APIs and payload schemas, so the absence of protobuf/OpenAPI files here is intentional rather than a missing contract.
+- `GC-23`, `GC-24`, and accepted risk `GC-27` are resolved as recorded in `14-decisions-assumptions-and-constraints.md`; `Q-SIG` is deferred and is not a release blocker.
+- `D-PATH` is deferred until a downstream fork; the public repository release does not change the module path.
 
 ## Assumptions
 - Open questions are limited to ownership, external decision-record visibility, and the unresolved JWT validation/config contract gap surfaced by current code/docs.

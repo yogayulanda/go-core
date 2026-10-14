@@ -1,6 +1,10 @@
 package logger
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"time"
+)
 
 // DBLog represents the standard structured log contract
 // for database operational and query-related logging.
@@ -21,28 +25,40 @@ type DBLog struct {
 	DurationMs int64                  // execution duration in milliseconds
 	ErrorCode  string                 // optional stable classification for monitoring
 	Metadata   map[string]interface{} // additional structured database-specific attributes
+	Slow       bool
 }
 
 func (z *zapLogger) LogDB(ctx context.Context, dbLog DBLog) {
 	fields := []Field{
-		{Key: "category", Value: "database"},
-		{Key: "operation", Value: dbLog.Operation},
-		{Key: "db_name", Value: dbLog.DBName},
-		{Key: "status", Value: dbLog.Status},
-		{Key: "duration_ms", Value: dbLog.DurationMs},
+		{Key: "app.log_type", Value: "db"},
+		{Key: "app.operation", Value: dbLog.Operation},
+		{Key: "app.db_name", Value: dbLog.DBName},
+		{Key: "app.status", Value: dbLog.Status},
+		{Key: "app.duration_ms", Value: dbLog.DurationMs},
 	}
 
 	if dbLog.Query != "" {
-		fields = append(fields, Field{Key: "query", Value: dbLog.Query})
+		fields = append(fields, Field{Key: "app.query", Value: dbLog.Query})
 	}
 
 	if dbLog.ErrorCode != "" {
-		fields = append(fields, Field{Key: "error_code", Value: dbLog.ErrorCode})
+		fields = append(fields, Field{Key: "error.code", Value: dbLog.ErrorCode})
 	}
 
 	if dbLog.Metadata != nil {
-		fields = append(fields, Field{Key: "metadata", Value: dbLog.Metadata})
+		fields = append(fields, Field{Key: "app.metadata", Value: dbLog.Metadata})
 	}
-
-	z.Info(ctx, "db_log", fields...)
+	if dbLog.Operation == "query" && dbLog.Status == "not_found" {
+		return
+	}
+	if dbLog.Status == "failed" || dbLog.Status == "error" {
+		z.Error(ctx, "db "+dbLog.Operation, fields...)
+		return
+	}
+	if dbLog.Slow || (z.config.SlowQueryThreshold > 0 && time.Duration(dbLog.DurationMs)*time.Millisecond > z.config.SlowQueryThreshold) {
+		fields = append(fields, Field{Key: "app.slow", Value: true})
+		z.Warn(ctx, fmt.Sprintf("SLOW SQL %d %s", dbLog.DurationMs, dbLog.Query), fields...)
+		return
+	}
+	z.Info(ctx, "db "+dbLog.Operation, fields...)
 }

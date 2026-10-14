@@ -4,7 +4,7 @@
 
 ## Features
 
-- **Resilience**: Integrated with `sony/gobreaker` for circuit breaking and configurable retries with backoff.
+- **Resilience**: Integrated with `sony/gobreaker` for circuit breaking; retries are disabled by default and opt-in.
 - **Observability**: Automatically propagates OpenTelemetry spans and emits structured `ServiceLog`.
 - **Sensible Defaults**: Timeout, retry, and circuit breaker policies come with pre-configured defaults aligned with `go-core` standards.
 
@@ -41,23 +41,44 @@ resp, err := client.Get(ctx, "https://api.external.com/v1/health")
 ### Advanced Configuration
 
 ```go
+import "github.com/yogayulanda/go-core/resilience"
+
 client := httpclient.NewClient(log,
     httpclient.WithTimeout(10 * time.Second),
+    httpclient.WithIdleConnTimeout(30 * time.Second),
     httpclient.WithUserAgent("my-custom-agent/1.0"),
     httpclient.WithoutTracing(),
 )
 ```
 
+Retries are disabled by default. Enable them explicitly for a client with `WithRetry`:
+
+```go
+import "github.com/yogayulanda/go-core/resilience"
+
+client := httpclient.NewClient(log,
+    httpclient.WithRetry(resilience.DefaultRetryOptions()),
+)
+```
+
+HTTP status responses, including 5xx responses, are returned with a nil error. `TransportError` describes failures before or after request headers were sent. Identity headers are forwarded only when `WithInternalPropagation()` is enabled.
+
+Request and response bodies are never logged by default. To opt in, provide a masker with `WithBodyLogging`; the callback is applied to both bodies before either is added to call metadata:
+
+```go
+httpclient.WithBodyLogging(func(body []byte) []byte {
+    return []byte("[masked]")
+})
+```
+
 ## Resilience Details
 
 ### Retries
-By default, the client retries on 5xx status codes and 429 (Too Many Requests). You can customize this via `WithRetryOptions`.
+The client does not retry by default. `WithRetry` accepts the existing resilience retry policy when retries are appropriate for the target operation.
 
 ### Circuit Breaker
 The default circuit breaker uses `sony/gobreaker` and triggers on 5xx responses. When the circuit is open, requests fail fast with an error, preventing downstream pressure on failing external services.
 
 ## Logging
 
-Each request and response (or error) emits a `ServiceLog` with:
-- `operation`: `httpclient_request` / `httpclient_response`
-- `metadata`: method, URL, status code, and duration.
+Each call emits one `ServiceLog` with operation `httpclient_call`. Metadata includes method, sanitized URL, status code when a response was received, duration, and transport phase/kind on transport failures.

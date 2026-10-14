@@ -30,25 +30,24 @@ import "context"
 //	    },
 //	}
 type EventLog struct {
-	EventType string                 // e.g. "user_login", "account_blocked"
-	ActorID   string                 // e.g. "user_12345"
-	Resource  string                 // e.g. "mobile_app", "account_6789"
-	Status    string                 // e.g. "success", "failed"
-	Metadata  map[string]interface{} // optional structured additional info
+	Category string
+	Action   string
+	Outcome  string
+	Metadata map[string]interface{}
 }
 
 func (z *zapLogger) LogEvent(ctx context.Context, e EventLog) {
 	fields := []Field{
-		{Key: "category", Value: "event"},
-		{Key: "event_type", Value: e.EventType},
-		{Key: "actor_id", Value: e.ActorID},
-		{Key: "resource", Value: e.Resource},
-		{Key: "status", Value: e.Status},
+		{Key: "event.kind", Value: "event"},
+		{Key: "event.category", Value: e.Category},
+		{Key: "event.action", Value: e.Action},
+		{Key: "event.outcome", Value: e.Outcome},
+		{Key: "app.log_type", Value: "event"},
 	}
 
 	if e.Metadata != nil {
-		fields = append(fields, Field{Key: "metadata", Value: e.Metadata})
+		fields = append(fields, Field{Key: "app.metadata", Value: e.Metadata})
 	}
 
-	z.Info(ctx, "event_log", fields...)
+	z.Info(ctx, "event "+e.Action+" "+e.Outcome, fields...)
 }

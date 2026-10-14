@@ -32,3 +32,9 @@ func TestJSON_ReturnsVersionPayload(t *testing.T) {
 		t.Fatalf("unexpected payload: %+v", got)
 	}
 }
+
+func TestDefaultVersionIsDev(t *testing.T) {
+	if Version != "dev" {
+		t.Fatalf("expected default version dev, got %q", Version)
+	}
+}

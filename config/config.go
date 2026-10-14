@@ -25,22 +25,27 @@ func (e *ValidationErrors) Error() string {
 }
 
 type Config struct {
-	App           AppConfig
-	Databases     map[string]DBConfig
-	Migration     MigrationConfig
-	GRPC          GRPCConfig
-	HTTP          HTTPConfig
-	Observability ObservabilityConfig
-	Auth          AuthConfig
-	Redis         RedisConfig
-	Memcached     MemcachedConfig
-	Kafka         KafkaConfig
+	App            AppConfig
+	Databases      map[string]DBConfig
+	Migration      MigrationConfig
+	GRPC           GRPCConfig
+	HTTP           HTTPConfig
+	Observability  ObservabilityConfig
+	Metrics        MetricsConfig
+	Log            LogConfig
+	Diagnostics    DiagnosticsConfig
+	Auth           AuthConfig
+	Redis          RedisConfig
+	Memcached      MemcachedConfig
+	Kafka          KafkaConfig
+	IgnoredEnvVars []string
 }
 
 type AppConfig struct {
 	ServiceName     string
 	Environment     string
 	LogLevel        string
+	DrainDelay      time.Duration
 	ShutdownTimeout time.Duration
 }
 
@@ -77,11 +82,19 @@ type GRPCConfig struct {
 }
 
 type HTTPConfig struct {
-	Port         int
-	TLSEnabled   bool
-	TLSCertFile  string
-	TLSKeyFile   string
-	PprofEnabled bool
+	Port               int
+	TLSEnabled         bool
+	TLSCertFile        string
+	TLSKeyFile         string
+	PprofEnabled       bool
+	CORSAllowedOrigins []string
+	CORSAllowedHeaders []string
+	ReadHeaderTimeout  time.Duration
+	ReadTimeout        time.Duration
+	WriteTimeout       time.Duration
+	IdleTimeout        time.Duration
+	MaxBodyBytes       int64
+	TrustedProxyHops   int
 }
 
 type ObservabilityConfig struct {
@@ -89,6 +102,25 @@ type ObservabilityConfig struct {
 	OTLPInsecure       bool
 	OTLPCACertFile     string
 	TraceSamplingRatio float64
+}
+
+type MetricsConfig struct {
+	Enabled bool
+}
+
+type DiagnosticsConfig struct {
+	Enabled              bool
+	HeapThresholdPercent int
+	GoroutineThreshold   int
+	Cooldown             time.Duration
+	CheckInterval        time.Duration
+}
+
+type LogConfig struct {
+	MaskKeys             []string
+	RequestStart         bool
+	SlowQueryThreshold   time.Duration
+	SlowRequestThreshold time.Duration
 }
 
 type AuthConfig struct {
@@ -130,11 +162,12 @@ type MemcachedConfig struct {
 }
 
 type KafkaConfig struct {
-	Enabled     bool
-	Brokers     []string
-	ClientID    string
-	Username    string
-	Password    string
-	JksFile     string
-	JksPassword string
+	Enabled       bool
+	Brokers       []string
+	ClientID      string
+	Username      string
+	Password      string
+	SASLMechanism string
+	JksFile       string
+	JksPassword   string
 }

@@ -1,80 +1,53 @@
 # Configuration Profiles
 
-Use this document to reason about configuration in groups instead of one long env list.
+Configuration is loaded by `config.Load` and validated by `cfg.Validate()`. Runtime tuning values are code fields unless listed as environment variables below.
 
-## 1. Core Required Profile
+## Required Service Profile
 
-Always decide first:
+- `SERVICE_NAME` (required)
+- `APP_ENV` (required: `local`, `dev`, `sit`, `uat`, or `prod`)
+- `LOG_LEVEL` (default `info`)
+- `GRPC_PORT` (default `50051`)
+- `HTTP_PORT` (default `8080`)
 
-- `SERVICE_NAME`
-- `APP_ENV`
-- `LOG_LEVEL`
-- `SHUTDOWN_TIMEOUT`
-- `GRPC_PORT`
-- `HTTP_PORT`
+## HTTP Profile
 
-## 2. Transport Security Profile
+- `HTTP_CORS_ALLOWED_ORIGINS` (empty disables CORS)
+- `HTTP_PPROF_ENABLED` (default false; pprof is rejected in production)
+- `AUTH_SIGNATURE_MASTER_KEY` (non-empty enables signature validation; scheme confirmation remains `Q-SIG`)
 
-Enable only when the service needs transport TLS:
+HTTP timeouts, maximum body size, CORS allowed headers, and trusted proxy hops are code fields under `config.HTTPConfig`. Defaults include read-header 5s, read 15s, write 60s, idle 120s, body limit 1 MiB, and trusted proxy hops 0.
 
-- `GRPC_TLS_*`
-- `HTTP_TLS_*`
-
-## 3. Database Profile
-
-Enable only when the service needs SQL storage:
+## Database Profile
 
 - `DB_LIST`
-- `DB_<NAME>_*`
+- `DB_<ALIAS>_DRIVER`: `sqlserver` or `mysql`
+- `DB_<ALIAS>_HOST`, `PORT`, `NAME`, `USER`, `PASSWORD`
+- `DB_<ALIAS>_PARAMS` (optional)
 
-Notes:
+Pool sizing and required/optional status are code fields. PostgreSQL and old pool/TLS env overrides are unsupported and ignored/reported.
 
-- required databases fail fast on startup and affect `/ready`
-- optional databases do not stop startup but still appear in readiness checks
+## Kafka Profile
 
-## 4. Migration Profile
+- `KAFKA_BROKERS` enables Kafka
+- `KAFKA_USERNAME`, `KAFKA_PASSWORD`, `KAFKA_SASL_MECHANISM` (`PLAIN`, `SCRAM-SHA-256`, `SCRAM-SHA-512`)
+- `KAFKA_JKS_FILE`, `KAFKA_JKS_PASSWORD`
 
-Enable only when the service chooses startup migration:
+`KAFKA_JKS_FILE` autodetects JKS and PEM trust material. Credentials and TLS are shared by producer, consumer, and readiness probes. The deployment's selected mechanism is still an operations question; all supported mechanisms are available.
 
-- `MIGRATION_AUTO_RUN`
-- `MIGRATION_DB`
-- `MIGRATION_DIR`
-- `MIGRATION_LOCK_*`
+## Observability And Diagnostics
 
-## 5. Observability Profile
+- `APM_ENDPOINT` enables the existing OTLP gRPC tracing exporter.
+- `METRICS_ENABLED` enables metric recording and `/metrics` (default false).
+- `DIAG_ENABLED` controls diagnostic snapshots (default true).
 
-Optional tracing and stronger telemetry:
+Tracing goes to Elastic APM Server via OpenTelemetry OTLP. No Elastic APM agent is used and logs do not contain `transaction.id`.
+Diagnostics thresholds, cooldown (10m), and check interval (30s) are code fields.
 
-- `OTEL_EXPORTER_OTLP_ENDPOINT`
-- `OTEL_EXPORTER_OTLP_INSECURE`
-- `OTEL_EXPORTER_OTLP_CA_CERT_FILE`
-- `TRACE_SAMPLING_RATIO`
+## Code-Only Runtime Fields
 
-## 6. Infra Dependency Profiles
-
-Enable per dependency:
-
-- Redis: `REDIS_*`
-- Memcached: `MEMCACHED_*` (plus legacy `MEMCACHE_HOST/PORT` fallback)
-- Kafka: `KAFKA_*` (supports SASL Plain and JKS certificates)
-
-Cache notes:
-
-- `REDIS_ENABLED=true` means Redis is part of the chosen runtime dependency set
-- `MEMCACHED_ENABLED=true` means Memcached is part of the chosen runtime dependency set
-- enabled caches fail fast during startup if the dependency is unavailable
-- enabled caches are treated as required by `/ready`
-- Memcached readiness intentionally treats cache miss as healthy so the probe stays lightweight and deterministic
-
-## 7. Auth Profile
-
-Enable internal JWT verification only when required:
-
-- `INTERNAL_JWT_*`
-
-## Validation DX
-
-Use:
-
-- `cfg.Validate()` for the simple public error path
-- `cfg.ValidateIssues()` when the caller wants structured validation issues grouped by section and field
+- `AppConfig`: `DrainDelay` 3s, `ShutdownTimeout` 25s.
+- `HTTPConfig`: timeouts, body limit, CORS headers, trusted proxy hops.
+- `DiagnosticsConfig`: heap threshold 80%, goroutine threshold 5000, cooldown 10m, check interval 30s.
+- `GRPCConfig` / `HTTPConfig`: server TLS fields; defaults are off.
+- DB pool limits, migration options, logging thresholds, trace sampling, and cache details.

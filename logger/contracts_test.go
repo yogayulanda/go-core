@@ -28,26 +28,26 @@ func TestLogService_EmitsStructuredFields(t *testing.T) {
 	})
 
 	entry := decodeLastJSONLog(t, buf.String())
-	if entry["message"] != "service_log" {
-		t.Fatalf("expected service_log message, got %v", entry["message"])
+	if entry["message"] != "service account_lookup success" {
+		t.Fatalf("unexpected service message, got %v", entry["message"])
 	}
-	if entry["category"] != "service" {
-		t.Fatalf("expected category service, got %v", entry["category"])
+	if entry["app.log_type"] != "service" {
+		t.Fatalf("expected app.log_type service, got %v", entry["app.log_type"])
 	}
-	if entry["operation"] != "account_lookup" {
-		t.Fatalf("expected operation account_lookup, got %v", entry["operation"])
+	if entry["app.operation"] != "account_lookup" {
+		t.Fatalf("expected app.operation account_lookup, got %v", entry["app.operation"])
 	}
-	if entry["status"] != "success" {
-		t.Fatalf("expected status success, got %v", entry["status"])
+	if entry["app.status"] != "success" {
+		t.Fatalf("expected app.status success, got %v", entry["app.status"])
 	}
-	if entry["duration_ms"] != float64(42) {
-		t.Fatalf("expected duration_ms 42, got %v", entry["duration_ms"])
+	if entry["app.duration_ms"] != float64(42) {
+		t.Fatalf("expected app.duration_ms 42, got %v", entry["app.duration_ms"])
 	}
-	if entry["request_id"] != "req-123" {
-		t.Fatalf("expected request_id req-123, got %v", entry["request_id"])
+	if entry["labels.request_id"] != "req-123" {
+		t.Fatalf("expected labels.request_id req-123, got %v", entry["labels.request_id"])
 	}
 
-	metadata, ok := entry["metadata"].(map[string]interface{})
+	metadata, ok := entry["app.metadata"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("expected metadata object")
 	}
@@ -69,17 +69,17 @@ func TestLogDB_EmitsStructuredFields(t *testing.T) {
 	})
 
 	entry := decodeLastJSONLog(t, buf.String())
-	if entry["message"] != "db_log" {
-		t.Fatalf("expected db_log message, got %v", entry["message"])
+	if entry["message"] != "db query" {
+		t.Fatalf("unexpected database message, got %v", entry["message"])
 	}
-	if entry["category"] != "database" {
-		t.Fatalf("expected category database, got %v", entry["category"])
+	if entry["app.log_type"] != "db" {
+		t.Fatalf("expected app.log_type db, got %v", entry["app.log_type"])
 	}
-	if entry["db_name"] != "primary" {
-		t.Fatalf("expected db_name primary, got %v", entry["db_name"])
+	if entry["app.db_name"] != "primary" {
+		t.Fatalf("expected app.db_name primary, got %v", entry["app.db_name"])
 	}
-	if entry["query"] != "SELECT * FROM users WHERE password = ?" {
-		t.Fatalf("expected query field to be present, got %v", entry["query"])
+	if entry["app.query"] != "SELECT * FROM users WHERE password = ?" {
+		t.Fatalf("expected app.query field to be present, got %v", entry["app.query"])
 	}
 }
 
@@ -98,37 +98,38 @@ func TestLogService_InjectsTraceID(t *testing.T) {
 	})
 
 	entry := decodeLastJSONLog(t, buf.String())
-	gotTraceID, _ := entry["trace_id"].(string)
+	gotTraceID, _ := entry["trace.id"].(string)
 	if gotTraceID == "" {
-		t.Fatalf("expected trace_id")
+		t.Fatalf("expected trace.id")
 	}
 
 	wantTraceID := trace.SpanFromContext(ctx).SpanContext().TraceID().String()
 	if gotTraceID != wantTraceID {
-		t.Fatalf("expected trace_id %s, got %s", wantTraceID, gotTraceID)
+		t.Fatalf("expected trace.id %s, got %s", wantTraceID, gotTraceID)
 	}
 }
 
 func TestLogTransaction_NoRegression_MessageAndCategory(t *testing.T) {
 	log, buf := newJSONTestLogger(t)
+	ctx := observability.WithGTID(context.Background(), "txn-1")
 
-	log.LogTransaction(context.Background(), TransactionLog{
-		Operation:     "payment_process",
-		TransactionID: "txn-1",
-		UserID:        "user-1",
-		Status:        "success",
-		DurationMs:    99,
+	log.LogTransaction(ctx, TransactionLog{
+		Feature:      "payment",
+		Product:      "transfer",
+		Status:       "success",
+		ResponseCode: "CORE-0000",
+		DurationMs:   99,
 	})
 
 	entry := decodeLastJSONLog(t, buf.String())
-	if entry["message"] != "transaction_log" {
-		t.Fatalf("expected transaction_log message, got %v", entry["message"])
+	if entry["message"] != "transaction payment txn-1  -> success CORE-0000 99ms" {
+		t.Fatalf("unexpected transaction message: %v", entry["message"])
 	}
-	if entry["category"] != "transaction" {
-		t.Fatalf("expected category transaction, got %v", entry["category"])
+	if entry["app.log_type"] != "transaction" {
+		t.Fatalf("expected transaction log type, got %v", entry["app.log_type"])
 	}
-	if entry["transaction_id"] != "txn-1" {
-		t.Fatalf("expected transaction_id txn-1, got %v", entry["transaction_id"])
+	if entry["labels.gtid"] != "txn-1" {
+		t.Fatalf("expected labels.gtid txn-1, got %v", entry["labels.gtid"])
 	}
 }
 

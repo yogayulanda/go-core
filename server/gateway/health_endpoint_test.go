@@ -13,6 +13,7 @@ import (
 
 	"github.com/yogayulanda/go-core/app"
 	"github.com/yogayulanda/go-core/config"
+	"github.com/yogayulanda/go-core/observability"
 	"github.com/yogayulanda/go-core/version"
 )
 
@@ -193,7 +194,7 @@ func TestVersionEndpoint_JSON(t *testing.T) {
 
 func TestMetricsEndpoint_OK(t *testing.T) {
 	mux := runtime.NewServeMux()
-	if err := registerMetricsEndpoint(mux); err != nil {
+	if err := registerMetricsEndpoint(mux, observability.NewMetrics(true)); err != nil {
 		t.Fatalf("register metrics endpoint failed: %v", err)
 	}
 
@@ -209,6 +210,18 @@ func TestMetricsEndpoint_OK(t *testing.T) {
 	}
 	if len(rec.Body.Bytes()) == 0 {
 		t.Fatalf("expected metrics payload")
+	}
+}
+
+func TestMetricsEndpoint_DisabledReturnsNotFound(t *testing.T) {
+	mux := runtime.NewServeMux()
+	if err := registerMetricsEndpoint(mux, observability.NewMetrics(false)); err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("disabled metrics endpoint returned %d, want 404", recorder.Code)
 	}
 }
 

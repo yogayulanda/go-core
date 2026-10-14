@@ -9,7 +9,6 @@ import (
 	coreErrors "github.com/yogayulanda/go-core/errors"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
@@ -47,6 +46,18 @@ func recoveryInterceptor(log logger.Logger) grpc.UnaryServerInterceptor {
 }
 
 func loggingInterceptor(app *app.App) grpc.UnaryServerInterceptor {
+	return loggingInterceptorWithLogger(app.Logger(), app.Config().Log.RequestStart)
+}
+
+func inFlightInterceptor(application *app.App) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, request interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		finish := application.TrackInFlight(ctx, info.FullMethod)
+		defer finish()
+		return handler(ctx, request)
+	}
+}
+
+func loggingInterceptorWithLogger(log logger.Logger, requestStart bool) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req interface{},
@@ -55,42 +66,61 @@ func loggingInterceptor(app *app.App) grpc.UnaryServerInterceptor {
 	) (interface{}, error) {
 
 		start := time.Now()
+		if requestStart {
+			log.Debug(ctx, "request_started", logger.Field{Key: "app.log_type", Value: "access"}, logger.Field{Key: "app.method", Value: info.FullMethod})
+		}
 
 		resp, err := handler(ctx, req)
 
 		duration := time.Since(start).Milliseconds()
-		statusStr := "success"
-		errorCode := ""
-		errorCategory := ""
+		responseCode := "CORE-0000"
+		class := "SUCCESS"
+		unregisteredCode := ""
+		errorMessage := ""
+		if code, responseClass, original := observability.ResponseInfo(ctx); code != "" {
+			responseCode = code
+			class = responseClass
+			unregisteredCode = original
+		}
 
 		if err != nil {
-			statusStr = "failed"
-
-			// Map back to AppError if possible
 			var appErr *coreErrors.AppError
 			if errors.As(err, &appErr) {
-				errorCode = string(appErr.Code)
-				errorCategory = string(appErr.Category)
-				err = coreErrors.ToGRPC(appErr)
-			} else {
-				errorCode = string(coreErrors.CodeInternal)
-				errorCategory = string(coreErrors.CategoryREC)
+				def, registered := coreErrors.Resolve(appErr.Code)
+				responseCode = def.Code
+				class = string(def.Class)
+				if !registered {
+					unregisteredCode = appErr.Code
+					errorMessage = ""
+				} else {
+					errorMessage = appErr.Message
+				}
 				err = coreErrors.ToGRPC(err)
+			} else {
+				if info, ok := coreErrors.InfoFromGRPC(err); ok {
+					responseCode = info.Code
+					class = string(info.Class)
+				} else {
+					responseCode = "CORE-9000"
+					class = "ERROR"
+					err = coreErrors.ToGRPC(err)
+				}
 			}
 		}
 
-		requestID := observability.GetRequestID(ctx)
-
-		app.Logger().LogService(ctx, logger.ServiceLog{
-			Operation:  "grpc_request",
-			Status:     statusStr,
-			DurationMs: duration,
-			ErrorCode:  errorCode,
-			Metadata: map[string]interface{}{
-				"method":         info.FullMethod,
-				"error_category": errorCategory,
-				"request_id":     requestID,
-			},
+		responseDef, _ := coreErrors.Resolve(responseCode)
+		statusCode := responseDef.HTTPStatus
+		log.LogService(ctx, logger.ServiceLog{
+			LogType:           "access",
+			Class:             class,
+			Route:             info.FullMethod,
+			Method:            info.FullMethod,
+			StatusCode:        statusCode,
+			ResponseCode:      responseCode,
+			DurationMs:        duration,
+			ErrorMessage:      errorMessage,
+			UnregisteredCode:  unregisteredCode,
+			RequestIDReplaced: observability.RequestIDReplaced(ctx),
 		})
 
 		return resp, err
@@ -116,6 +146,9 @@ func metricsInterceptor(app *app.App) grpc.UnaryServerInterceptor {
 			statusStr = "failed"
 		}
 
+		if !app.Metrics().Enabled {
+			return resp, err
+		}
 		serviceName := app.Config().App.ServiceName
 
 		app.Metrics().RequestTotal.WithLabelValues(
@@ -155,7 +188,7 @@ func authInterceptorWithLogger(verifier *security.InternalJWTVerifier, log logge
 			token, err := bearerTokenFromMetadata(ctx)
 			if err != nil {
 				logAuthResult(ctx, log, verifier, info.FullMethod, "failed", authExtractionErrorCode(err), nil)
-				return nil, status.Error(codes.Unauthenticated, authClientErrorMessage())
+				return nil, coreErrors.ToGRPC(coreErrors.New("CORE-1001", authClientErrorMessage()))
 			}
 
 			claims, err := verifier.Verify(token)
@@ -164,7 +197,7 @@ func authInterceptorWithLogger(verifier *security.InternalJWTVerifier, log logge
 					"issuer_set":   verifier.ConfigMetadata()["issuer_set"],
 					"audience_set": verifier.ConfigMetadata()["audience_set"],
 				})
-				return nil, status.Error(codes.Unauthenticated, authClientErrorMessage())
+				return nil, coreErrors.ToGRPC(coreErrors.New("CORE-1001", authClientErrorMessage()))
 			}
 
 			if claims != nil {
@@ -223,22 +256,50 @@ func requestIDInterceptor() grpc.UnaryServerInterceptor {
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
 
-		md, ok := metadata.FromIncomingContext(ctx)
-
-		var requestID string
-
-		if ok {
-			values := md.Get("x-request-id")
-			if len(values) > 0 {
-				requestID = values[0]
+		ctx = observability.EnsureFieldBag(ctx)
+		md, _ := metadata.FromIncomingContext(ctx)
+		requestIDs := md.Get("x-request-id")
+		requestID := ""
+		if len(requestIDs) > 0 && observability.IsValidRequestID(requestIDs[0]) {
+			requestID = requestIDs[0]
+		} else {
+			requestID = observability.GenerateRequestID()
+			if len(requestIDs) > 0 {
+				observability.MarkRequestIDReplaced(ctx)
 			}
 		}
-
-		if requestID == "" {
-			requestID = observability.GenerateRequestID()
-		}
-
 		ctx = observability.WithRequestID(ctx, requestID)
+		_ = grpc.SetHeader(ctx, metadata.Pairs("x-request-id", requestID))
+
+		userIDs := md.Get("x-user-id")
+		labels := make(map[string]string)
+		metadataValues := map[string]struct{}{}
+		for _, label := range observability.PropagatedLabels() {
+			metadataValues[label] = struct{}{}
+		}
+		for key, values := range md {
+			if !strings.HasPrefix(key, observability.LabelMetadataPrefix) || len(values) == 0 {
+				continue
+			}
+			label := strings.TrimPrefix(key, observability.LabelMetadataPrefix)
+			if _, registered := metadataValues[label]; registered {
+				labels[label] = values[0]
+			}
+		}
+		userID := ""
+		if len(userIDs) > 0 {
+			userID = userIDs[0]
+		}
+		observability.RestoreIncomingIdentity(ctx, userID, labels)
+		if values := md.Get("x-core-client-ip"); len(values) > 0 {
+			_ = observability.SetClientIP(ctx, values[0])
+		}
+		if values := md.Get("x-core-user-agent"); len(values) > 0 {
+			_ = observability.SetUserAgent(ctx, values[0])
+		}
+		if values := md.Get("x-core-request-id-replaced"); len(values) > 0 && values[0] == "true" {
+			observability.MarkRequestIDReplaced(ctx)
+		}
 
 		return handler(ctx, req)
 	}

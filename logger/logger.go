@@ -47,8 +47,7 @@ type Field struct {
 
 // Standardized field keys for consistent logging
 const (
-	FieldCustomerID       = "customer_id"
 	FieldIdempotencyKey   = "idempotency_key"
 	FieldPartnerReference = "partner_reference"
-	FieldTransactionID    = "transaction_id"
+	FieldGTID             = "gtid"
 )

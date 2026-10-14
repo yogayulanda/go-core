@@ -31,28 +31,13 @@ func NewRecordService(repo RecordRepository, log logger.Logger) *RecordService {
 func (s *RecordService) Create(ctx context.Context, in CreateRecordInput) (string, error) {
 	startedAt := time.Now()
 	if strings.TrimSpace(in.SubjectID) == "" {
-		return "", coreerrors.Build("EXM", coreerrors.CategoryVAL, "101").
-			Message("invalid request").
-			UserMessage("Subject ID diperlukan").
-			Finality(coreerrors.FinalityBusiness).
-			Details(coreerrors.Detail{Field: "subject_id", Reason: "required"}).
-			Done()
+		return "", coreerrors.Validation("invalid subject id", coreerrors.Detail{Field: "subject_id", Reason: "required"})
 	}
 	if strings.TrimSpace(in.ReferenceID) == "" {
-		return "", coreerrors.Build("EXM", coreerrors.CategoryVAL, "102").
-			Message("invalid request").
-			UserMessage("Reference ID diperlukan").
-			Finality(coreerrors.FinalityBusiness).
-			Details(coreerrors.Detail{Field: "reference_id", Reason: "required"}).
-			Done()
+		return "", coreerrors.Validation("invalid reference id", coreerrors.Detail{Field: "reference_id", Reason: "required"})
 	}
 	if in.Amount <= 0 {
-		return "", coreerrors.Build("EXM", coreerrors.CategoryVAL, "103").
-			Message("invalid request").
-			UserMessage("Amount harus lebih besar dari 0").
-			Finality(coreerrors.FinalityBusiness).
-			Details(coreerrors.Detail{Field: "amount", Reason: "must be > 0"}).
-			Done()
+		return "", coreerrors.Validation("invalid amount", coreerrors.Detail{Field: "amount", Reason: "must be > 0"})
 	}
 
 	id, err := s.repo.Create(ctx, in)
@@ -69,12 +54,7 @@ func (s *RecordService) Create(ctx context.Context, in CreateRecordInput) (strin
 				},
 			})
 		}
-		return "", coreerrors.Build("EXM", coreerrors.CategoryDB, "001").
-			Message("create record failed: " + err.Error()).
-			UserMessage("Terjadi kesalahan saat memproses data.").
-			Finality(coreerrors.FinalityTechnicalRecoverable).
-			Retryable(true).
-			Done()
+		return "", coreerrors.Wrap("CORE-9001", "create record failed: "+err.Error(), err)
 	}
 
 	if s.log != nil {

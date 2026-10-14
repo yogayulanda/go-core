@@ -24,7 +24,7 @@ Current approved example:
 
 - `logger.TransactionLog`
 - `logger.Logger.LogTransaction(...)`
-- `app_transaction_total{service,operation,status}`
+- Transaction log identity and `app.transaction.*` fields; Prometheus transaction counter is not provided.
 
 Approved generic logging contracts:
 

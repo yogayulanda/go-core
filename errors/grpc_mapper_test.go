@@ -1,7 +1,8 @@
 package errors
 
 import (
-	"fmt"
+	"context"
+	"errors"
 	"testing"
 
 	errdetails "google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -9,234 +10,75 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestToGRPC_RoundTripForStableCodes(t *testing.T) {
-	cases := []struct {
-		name     string
-		appErr   *AppError
-		grpcCode codes.Code
-		wantCode Code
-	}{
-		{
-			name:     "invalid_request",
-			appErr:   Validation("invalid request", Detail{Field: "user_id", Reason: "required"}),
-			grpcCode: codes.InvalidArgument,
-			wantCode: CodeInvalidRequest,
-		},
-		{
-			name:     "unauthorized",
-			appErr:   New(CodeUnauthorized, ""),
-			grpcCode: codes.Unauthenticated,
-			wantCode: CodeUnauthorized,
-		},
-		{
-			name:     "session_expired",
-			appErr:   New(CodeSessionExpired, ""),
-			grpcCode: codes.Unauthenticated,
-			wantCode: CodeSessionExpired,
-		},
-		{
-			name:     "forbidden",
-			appErr:   New(CodeForbidden, ""),
-			grpcCode: codes.PermissionDenied,
-			wantCode: CodeForbidden,
-		},
-		{
-			name:     "not_found",
-			appErr:   New(CodeNotFound, ""),
-			grpcCode: codes.NotFound,
-			wantCode: CodeNotFound,
-		},
-		{
-			name:     "service_unavailable",
-			appErr:   New(CodeServiceUnavailable, ""),
-			grpcCode: codes.Unavailable,
-			wantCode: CodeServiceUnavailable,
-		},
-		{
-			name:     "internal_error",
-			appErr:   New(CodeInternal, ""),
-			grpcCode: codes.Internal,
-			wantCode: CodeInternal,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := ToGRPC(tc.appErr)
-			st, ok := status.FromError(err)
-			if !ok {
-				t.Fatalf("expected grpc status error")
-			}
-			if st.Code() != tc.grpcCode {
-				t.Fatalf("expected grpc code %v, got %v", tc.grpcCode, st.Code())
-			}
-			if code := CodeFromGRPC(err); code != tc.wantCode {
-				t.Fatalf("expected core code %s, got %s", tc.wantCode, code)
-			}
-		})
-	}
+type testMessageProvider struct {
+	message string
+	ok      bool
 }
 
-func TestToGRPC_ValidationWithDetails(t *testing.T) {
-	appErr := Validation(
-		"",
-		Detail{Field: "user_id", Reason: "required"},
-		Detail{Field: "amount", Reason: "must be > 0"},
-	)
+func (p testMessageProvider) Message(context.Context, string) (string, bool) {
+	return p.message, p.ok
+}
 
-	err := ToGRPC(appErr)
-	st, ok := status.FromError(err)
-	if !ok {
-		t.Fatalf("expected grpc status error")
-	}
-	if st.Code() != codes.InvalidArgument {
-		t.Fatalf("expected invalid argument, got %v", st.Code())
+func TestToGRPC_RegistryMappingAndDetails(t *testing.T) {
+	grpcErr := ToGRPC(Validation("technical validation detail", Detail{Field: "amount", Reason: "must be positive"}))
+	st, ok := status.FromError(grpcErr)
+	if !ok || st.Code() != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument status, got %v", grpcErr)
 	}
 	if st.Message() != "invalid request" {
-		t.Fatalf("unexpected message: %s", st.Message())
+		t.Fatalf("technical message leaked or default message missing: %q", st.Message())
 	}
-
-	gotCode := CodeFromGRPC(err)
-	if gotCode != CodeInvalidRequest {
-		t.Fatalf("expected code %s, got %s", CodeInvalidRequest, gotCode)
+	info, ok := InfoFromGRPC(grpcErr)
+	if !ok || info.Code != "CORE-1000" || info.Class != ClassFailed || info.Finality != FinalityBusiness || info.Retryable {
+		t.Fatalf("unexpected gRPC error metadata: %+v, %v", info, ok)
 	}
-
-	gotDetails := DetailsFromGRPC(err)
-	if len(gotDetails) != 2 {
-		t.Fatalf("expected 2 details, got %d", len(gotDetails))
+	gotDetails := DetailsFromGRPC(grpcErr)
+	if len(gotDetails) != 1 || gotDetails[0] != (Detail{Field: "amount", Reason: "must be positive"}) {
+		t.Fatalf("unexpected validation details: %+v", gotDetails)
 	}
 }
 
-func TestToGRPC_NonValidation_DoesNotExposeDetails(t *testing.T) {
-	err := ToGRPC(&AppError{
-		Code:    CodeForbidden,
-		Message: "forbidden request",
-		Details: []Detail{{Field: "role", Reason: "missing"}},
-	})
-
-	if got := DetailsFromGRPC(err); len(got) != 0 {
-		t.Fatalf("expected no grpc details for non-validation error, got %v", got)
+func TestToGRPC_UnknownCodeFallsBackWithoutLeakingMessage(t *testing.T) {
+	grpcErr := ToGRPC(New("UNREGISTERED-CODE", "secret internal detail"))
+	st, ok := status.FromError(grpcErr)
+	if !ok || st.Code() != codes.Internal || st.Message() != "internal server error" {
+		t.Fatalf("unexpected unknown-code mapping: %v", grpcErr)
+	}
+	info, ok := InfoFromGRPC(grpcErr)
+	if !ok || info.Code != "CORE-9000" || info.Class != ClassError {
+		t.Fatalf("unexpected fallback info: %+v, %v", info, ok)
 	}
 }
 
-func TestToGRPC_UnknownErrorFallback(t *testing.T) {
-	err := ToGRPC(status.Error(codes.DataLoss, "raw internal"))
-	st, ok := status.FromError(err)
-	if !ok {
-		t.Fatalf("expected grpc status error")
-	}
-	if st.Code() != codes.Internal {
-		t.Fatalf("expected internal, got %v", st.Code())
-	}
-	if st.Message() != "internal server error" {
-		t.Fatalf("unexpected message: %s", st.Message())
+func TestToGRPC_NonAppErrorIsSanitized(t *testing.T) {
+	grpcErr := ToGRPC(errors.New("raw database password detail"))
+	st, ok := status.FromError(grpcErr)
+	if !ok || st.Code() != codes.Internal || st.Message() != "internal server error" {
+		t.Fatalf("non-AppError was not sanitized: %v", grpcErr)
 	}
 }
 
-func TestCodeFromGRPC_UnknownReasonFallbackToStatusCode(t *testing.T) {
-	st := status.New(codes.NotFound, "not found")
-	withDetails, err := st.WithDetails(&errdetails.ErrorInfo{
-		Reason: "UNKNOWN_CODE_FROM_UPSTREAM",
-		Domain: "test",
-	})
+func TestMessageProviderOverrideAndFallback(t *testing.T) {
+	previous := registry.messageProvider
+	t.Cleanup(func() { SetMessageProvider(previous) })
+
+	def, _ := Lookup("CORE-1000")
+	SetMessageProvider(testMessageProvider{message: "user-facing override", ok: true})
+	if got := messageFor(context.Background(), "CORE-1000", def); got != "user-facing override" {
+		t.Fatalf("provider override not used: %q", got)
+	}
+	SetMessageProvider(testMessageProvider{message: "", ok: false})
+	if got := messageFor(context.Background(), "CORE-1000", def); got != "invalid request" {
+		t.Fatalf("default message not used when provider declines: %q", got)
+	}
+}
+
+func TestInfoFromGRPCRejectsNonCoreInfo(t *testing.T) {
+	foreign, err := status.New(codes.NotFound, "not found").WithDetails(&errdetails.ErrorInfo{Reason: "CORE-1004", Domain: "another-service"})
 	if err != nil {
-		t.Fatalf("with details failed: %v", err)
+		t.Fatalf("attach detail: %v", err)
 	}
-
-	if code := CodeFromGRPC(withDetails.Err()); code != CodeNotFound {
-		t.Fatalf("expected fallback code %s, got %s", CodeNotFound, code)
-	}
-}
-
-func TestToGRPC_WrappedAppError_UsesWrappedCode(t *testing.T) {
-	wrapped := fmt.Errorf("outer: %w", Validation("invalid request", Detail{Field: "id", Reason: "required"}))
-
-	err := ToGRPC(wrapped)
-	st, ok := status.FromError(err)
-	if !ok {
-		t.Fatalf("expected grpc status error")
-	}
-	if st.Code() != codes.InvalidArgument {
-		t.Fatalf("expected invalid argument, got %v", st.Code())
-	}
-	if code := CodeFromGRPC(err); code != CodeInvalidRequest {
-		t.Fatalf("expected code %s, got %s", CodeInvalidRequest, code)
-	}
-}
-
-func TestErrorResponseFromError_DirectAppError(t *testing.T) {
-	resp := ErrorResponseFromError(Validation("invalid request", Detail{Field: "user_id", Reason: "required"}), "req-1", "tx-1")
-
-	if resp.Code != string(CodeInvalidRequest) {
-		t.Fatalf("unexpected code: %s", resp.Code)
-	}
-	if resp.Message != "invalid request" {
-		t.Fatalf("unexpected message: %s", resp.Message)
-	}
-	if resp.TraceID != "req-1" {
-		t.Fatalf("unexpected trace_id: %s", resp.TraceID)
-	}
-	if len(resp.Details) != 1 {
-		t.Fatalf("expected 1 detail, got %d", len(resp.Details))
-	}
-}
-
-func TestErrorResponseFromError_GRPCInternalWithoutCoreInfo_IsSanitized(t *testing.T) {
-	resp := ErrorResponseFromError(status.Error(codes.Internal, "raw database panic"), "req-2", "tx-2")
-
-	if resp.Code != string(CodeInternal) {
-		t.Fatalf("unexpected code: %s", resp.Code)
-	}
-	if resp.Message != defaultMessage(CodeInternal) {
-		t.Fatalf("expected sanitized internal message, got %s", resp.Message)
-	}
-	if len(resp.Details) != 0 {
-		t.Fatalf("expected no details, got %v", resp.Details)
-	}
-}
-
-func TestErrorResponseFromError_GRPCValidationWithCoreInfo_UsesDetails(t *testing.T) {
-	err := ToGRPC(Validation("invalid request", Detail{Field: "amount", Reason: "must be > 0"}))
-	resp := ErrorResponseFromError(err, "req-3", "tx-3")
-
-	if resp.Code != string(CodeInvalidRequest) {
-		t.Fatalf("unexpected code: %s", resp.Code)
-	}
-	if resp.Message != "invalid request" {
-		t.Fatalf("unexpected message: %s", resp.Message)
-	}
-	if len(resp.Details) != 1 {
-		t.Fatalf("expected 1 detail, got %d", len(resp.Details))
-	}
-}
-
-func TestToGRPC_RoundtripCustomFields(t *testing.T) {
-	err := Build("TRF", CategoryVAL, "123").
-		Message("internal").
-		UserMessage("user friendly").
-		Retryable(true).
-		Finality(FinalityTechnicalRecoverable).
-		Done()
-
-	grpcErr := ToGRPC(err)
-	_, domain, category, number, userMessage, isCore := ErrorInfoFromGRPC(grpcErr)
-
-	if !isCore {
-		t.Fatalf("expected core error")
-	}
-	if domain != "TRF" {
-		t.Fatalf("domain mismatch")
-	}
-	if category != string(CategoryVAL) {
-		t.Fatalf("category mismatch")
-	}
-	if number != "123" {
-		t.Fatalf("number mismatch")
-	}
-	if userMessage != "user friendly" {
-		t.Fatalf("userMessage mismatch")
-	}
-	if RetryableFromGRPC(grpcErr) != true {
-		t.Fatalf("retryable mismatch")
+	if _, ok := InfoFromGRPC(foreign.Err()); ok {
+		t.Fatal("foreign ErrorInfo must not be treated as go-core")
 	}
 }

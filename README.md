@@ -21,7 +21,7 @@ github.com/yogayulanda/go-core
 - SQL database initialization, migrations, and transaction helpers.
 - Kafka publishing/consuming and outbox helpers.
 - Redis and Memcached cache initialization.
-- Resilience helpers for timeout, retry, circuit breaker, and HTTP clients.
+- Resilience helpers for timeout, opt-in retry, circuit breaker, and HTTP/gRPC clients.
 - Stable application error contracts for transport-safe responses.
 
 ## Architecture Overview
@@ -38,7 +38,7 @@ github.com/yogayulanda/go-core
 - `messaging/` provides Kafka publisher/consumer abstractions.
 - `messaging/outbox/` provides driver-aware SQL outbox helpers.
 - `logger/` defines structured technical logging contracts and redaction.
-- `observability/` contains tracing, metrics, request ID, and transaction ID helpers.
+- `observability/` contains tracing, metrics, request identity, and runtime diagnostic snapshots.
 - `errors/` defines application error taxonomy and gRPC/HTTP mapping.
 - `cache/`, `httpclient/`, `resilience/`, `security/`, and `version/` cover supporting runtime concerns.
 
@@ -53,7 +53,7 @@ The intended service shape remains conventional Go:
 
 - Go 1.24+
 - gRPC and grpc-gateway
-- GORM with SQL Server support and DSN composition helpers for MySQL/PostgreSQL/SQL Server
+- GORM with SQL Server and MySQL support
 - Goose migrations
 - Kafka via `segmentio/kafka-go`
 - Redis and Memcached clients
@@ -110,35 +110,32 @@ Core variables:
 - `SERVICE_NAME`
 - `APP_ENV`
 - `LOG_LEVEL`
-- `LOG_TIMEZONE`
-- `SHUTDOWN_TIMEOUT`
 - `GRPC_PORT`
 - `HTTP_PORT`
-- `GRPC_TLS_ENABLED`, `GRPC_TLS_CERT_FILE`, `GRPC_TLS_KEY_FILE`
-- `HTTP_TLS_ENABLED`, `HTTP_TLS_CERT_FILE`, `HTTP_TLS_KEY_FILE`
+- `HTTP_CORS_ALLOWED_ORIGINS`
+- `HTTP_PPROF_ENABLED`
+- `DIAG_ENABLED`
+- `METRICS_ENABLED` (default false; enables metric recording and `/metrics`)
 
 Database variables:
 
 - `DB_LIST`
-- `DB_<NAME>_DRIVER`
-- `DB_<NAME>_DSN`
+- `DB_<NAME>_DRIVER` supports `sqlserver` and `mysql`
 - `DB_<NAME>_HOST`
 - `DB_<NAME>_PORT`
 - `DB_<NAME>_NAME`
 - `DB_<NAME>_USER`
 - `DB_<NAME>_PASSWORD`
 - `DB_<NAME>_PARAMS`
-- `DB_<NAME>_REQUIRED`
 
 Optional runtime dependencies:
 
-- Redis: `REDIS_ENABLED`, `REDIS_ADDRESS`, `REDIS_PASSWORD`, `REDIS_DB`
-- Memcached: `MEMCACHED_ENABLED`, `MEMCACHED_SERVERS`, `MEMCACHED_TIMEOUT`
-- Kafka: `KAFKA_ENABLED`, `KAFKA_BROKERS`, `KAFKA_CLIENT_ID`, `KAFKA_USERNAME`, `KAFKA_PASSWORD`
-- Migrations: `MIGRATION_AUTO_RUN`, `MIGRATION_DB`, `MIGRATION_DIR`, `MIGRATION_LOCK_ENABLED`
-- Tracing: `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_INSECURE`, `OTEL_EXPORTER_OTLP_CA_CERT_FILE`, `TRACE_SAMPLING_RATIO`
-- Auth: `INTERNAL_JWT_ENABLED`, `INTERNAL_JWT_PUBLIC_KEY`, `INTERNAL_JWT_JWKS_ENDPOINT`, `INTERNAL_JWT_ISSUER`, `INTERNAL_JWT_AUDIENCE`
-- HTTP signatures: `AUTH_SIGNATURE_ENABLED`, `AUTH_SIGNATURE_MASTER_KEY`
+- Redis: `REDIS_ADDRESS` enables Redis; `REDIS_PASSWORD` is optional
+- Memcached: `MEMCACHED_SERVERS` enables Memcached
+- Kafka: `KAFKA_BROKERS` enables Kafka; optional SASL uses `KAFKA_USERNAME`, `KAFKA_PASSWORD`, and `KAFKA_SASL_MECHANISM`
+- Kafka TLS: `KAFKA_JKS_FILE` and `KAFKA_JKS_PASSWORD`
+- Tracing: `APM_ENDPOINT` enables the existing OTLP gRPC exporter
+- HTTP signatures: a non-empty `AUTH_SIGNATURE_MASTER_KEY` enables signature validation
 
 See `docs/CONFIGURATION_PROFILES.md` for grouped configuration guidance.
 
@@ -210,7 +207,7 @@ func main() {
 
 External responses should be predictable and safe. Internal details belong in logs and traces, not client payloads.
 
-- Use `errors.AppError` and the builder APIs for application-visible failures.
+- Use `errors.New`, `errors.Wrap`, or `errors.Validation` for application-visible failures; register custom response definitions with `errors.Register`.
 - Keep validation details explicit and structured.
 - Sanitize unknown/internal transport errors to stable public messages.
 - Preserve richer technical context through structured logs and observability signals.
@@ -223,7 +220,22 @@ The repository provides additive observability primitives rather than a mandator
 - sensitive key redaction for common secret fields
 - Prometheus metrics for HTTP, gRPC, service operations, DB operations, messaging, outbox, and transaction-oriented flows
 - OpenTelemetry tracing bootstrap and transport wrappers
+- OpenTelemetry OTLP export to Elastic APM Server via `APM_ENDPOINT`; no Elastic APM agent or `transaction.id` log field
 - health, readiness, metrics, version, and optional pprof endpoints
+- bounded gateway `route` labels from matched templates; unmatched paths share `unmatched`
+- optional diagnostic snapshots when goroutine or cgroup heap thresholds are crossed; `DIAG_ENABLED=false` disables the watcher
+
+Shutdown starts a drain phase: `/ready` returns 503 and gRPC health reports `NOT_SERVING`, then the configured drain delay elapses before HTTP/gRPC graceful shutdown. Defaults are 3 seconds drain and 25 seconds shutdown.
+
+## Outbound Clients
+
+`httpclient.NewClient` does not retry by default. Use `httpclient.WithRetry(...)` to opt in. A received HTTP response, including 5xx, is returned with a nil transport error; connection/timeout failures use `httpclient.TransportError`. Request identity headers are forwarded only with `httpclient.WithInternalPropagation()`. HTTP body logging is disabled unless a masking callback is provided.
+
+`grpcclient.NewClient` provides request identity propagation, OpenTelemetry stats, call logging/metrics, keepalive, and a 30-second default deadline when the supplied context has no deadline. Service-config retries are disabled. The default transport is plaintext to match the default go-core gRPC server; configure credentials explicitly for TLS.
+
+## Kafka And Audit Events
+
+Kafka supports SASL `PLAIN`, `SCRAM-SHA-256`, and `SCRAM-SHA-512`; `KAFKA_JKS_FILE` accepts JKS or PEM trust material. Producer, consumer, and readiness use the same security config. The outbox uses an identity row ID plus UUID `event_id`, per-key leases, bounded retries, and `DEAD` state. `outbox.Publisher.PublishAudit` writes CloudEvents 1.0 `ce_*` attributes (including `ce_sequence`) into the outbox; consumer handlers can read them with `messaging.CloudEventsFromContext(ctx)`. Optional test helpers live in `coretest`.
 
 ## Repository Structure
 
@@ -237,6 +249,8 @@ docs/                 Architecture, operations, reliability, and release docs
 errors/               Application error contract and transport mapping
 examples/             Focused integration examples
 httpclient/           Resilient outbound HTTP client
+grpcclient/           Identity-aware outbound gRPC client
+coretest/             Test-only recording logger, fake publisher, and HTTP fixtures
 logger/               Structured logging contracts and redaction
 messaging/            Kafka abstractions and outbox support
 migration/            Goose migration helpers
@@ -271,6 +285,8 @@ Useful starting points:
 - `docs/MESSAGING_PATTERN.md`
 - `docs/RELIABILITY.md`
 - `docs/SECURITY.md`
+- `docs/TECHNICAL_GUIDE.md`
+- `docs/DATA_MODEL.md`
 - `docs/VERSIONING.md`
 - `MIGRATION.md`
 
@@ -303,6 +319,8 @@ BASE_URL=https://staging.example.com TARGET_PATH=/health make load-steady
 ```
 
 Use `docs/PRODUCTION_SIGNOFF.md` and `docs/RELEASE_EVIDENCE_TEMPLATE.md` when preparing a production service release that consumes this module.
+
+Downstream forks may adjust the module path before adoption. `Q-SIG` confirmation is deferred but is not a release blocker. GC-23 uses OpenTelemetry OTLP to Elastic APM Server; GC-24 metrics are opt-in via `METRICS_ENABLED` (default false). The source directive stays Go 1.24.3; the current build image uses Go 1.24.13 and the next upgrade target is 1.26.x.
 
 Set build metadata with `-ldflags` when building a service that exposes `/version`:
 

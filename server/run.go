@@ -219,7 +219,7 @@ func resolveShutdownWaitTimeout(application *app.App) time.Duration {
 		return defaultWaitTimeout
 	}
 
-	timeout := application.Config().App.ShutdownTimeout
+	timeout := application.Config().App.DrainDelay + application.Config().App.ShutdownTimeout
 	if timeout <= 0 {
 		return defaultWaitTimeout
 	}

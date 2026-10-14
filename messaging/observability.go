@@ -21,7 +21,7 @@ func logMessagePublish(ctx context.Context, cfg publisherConfig, topic string, s
 }
 
 func observeMessagePublish(cfg publisherConfig, topic string, status string) {
-	if cfg.metrics == nil || cfg.serviceName == "" {
+	if cfg.metrics == nil || !cfg.metrics.Enabled || cfg.serviceName == "" {
 		return
 	}
 	cfg.metrics.MessagePublishTotal.WithLabelValues(cfg.serviceName, topic, status).Inc()
@@ -41,14 +41,14 @@ func logMessageConsume(ctx context.Context, cfg consumerConfig, status string, e
 }
 
 func observeMessageConsume(cfg consumerConfig, topic string, groupID string, status string) {
-	if cfg.metrics == nil || cfg.serviceName == "" {
+	if cfg.metrics == nil || !cfg.metrics.Enabled || cfg.serviceName == "" {
 		return
 	}
 	cfg.metrics.MessageConsumeTotal.WithLabelValues(cfg.serviceName, topic, groupID, status).Inc()
 }
 
 func observeMessageProcessDuration(cfg consumerConfig, topic string, groupID string, duration time.Duration) {
-	if cfg.metrics == nil || cfg.serviceName == "" {
+	if cfg.metrics == nil || !cfg.metrics.Enabled || cfg.serviceName == "" {
 		return
 	}
 	cfg.metrics.MessageProcessDuration.WithLabelValues(cfg.serviceName, topic, groupID).Observe(duration.Seconds())

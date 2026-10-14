@@ -16,7 +16,7 @@ func TestNew_RequiredDatabaseFailure_ReturnError(t *testing.T) {
 	restore := overrideNewDatabaseFn(t)
 	defer restore()
 
-	newDatabaseFn = func(cfg config.DBConfig, log logger.Logger) (*database.DB, error) {
+	newDatabaseFn = func(cfg config.DBConfig, log logger.Logger, _ ...database.Option) (*database.DB, error) {
 		return nil, errors.New("db connect failed")
 	}
 
@@ -45,7 +45,7 @@ func TestNew_OptionalDatabaseFailure_ContinueStartup(t *testing.T) {
 	}
 	defer rawDB.Close()
 
-	newDatabaseFn = func(cfg config.DBConfig, log logger.Logger) (*database.DB, error) {
+	newDatabaseFn = func(cfg config.DBConfig, log logger.Logger, _ ...database.Option) (*database.DB, error) {
 		if cfg.Driver == "sqlserver" {
 			return nil, errors.New("optional db down")
 		}
@@ -87,7 +87,7 @@ func TestNew_AllOptionalDatabaseFailure_StartupSuccess(t *testing.T) {
 	restore := overrideNewDatabaseFn(t)
 	defer restore()
 
-	newDatabaseFn = func(cfg config.DBConfig, log logger.Logger) (*database.DB, error) {
+	newDatabaseFn = func(cfg config.DBConfig, log logger.Logger, _ ...database.Option) (*database.DB, error) {
 		return nil, errors.New("db unavailable")
 	}
 

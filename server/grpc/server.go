@@ -8,19 +8,26 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 
+	"github.com/segmentio/kafka-go"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"google.golang.org/grpc/grpclog"
 
 	"github.com/yogayulanda/go-core/app"
 	"github.com/yogayulanda/go-core/logger"
+	"github.com/yogayulanda/go-core/messaging"
 	"github.com/yogayulanda/go-core/security"
 )
 
 type Server struct {
-	server *grpc.Server
-	lis    net.Listener
-	app    *app.App
+	server      *grpc.Server
+	lis         net.Listener
+	app         *app.App
+	health      *health.Server
+	kafkaDialer *kafka.Dialer
 }
 
 func (s *Server) Name() string {
@@ -42,6 +49,15 @@ func New(application *app.App) (*Server, error) {
 	}
 
 	log := application.Logger()
+	grpclog.SetLoggerV2(logger.NewGRPCLoggerV2(log))
+	var kafkaDialer *kafka.Dialer
+	if cfg.Kafka.Enabled {
+		var err error
+		kafkaDialer, err = messaging.NewKafkaDialer(cfg.Kafka)
+		if err != nil {
+			return nil, fmt.Errorf("init Kafka health dialer failed: %w", err)
+		}
+	}
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.GRPC.Port))
 	if err != nil {
@@ -71,8 +87,9 @@ func New(application *app.App) (*Server, error) {
 		grpc.ChainUnaryInterceptor(
 			recoveryInterceptor(log),
 			requestIDInterceptor(),
-			authInterceptorWithLogger(authVerifier, log),
+			inFlightInterceptor(application),
 			loggingInterceptor(application),
+			authInterceptorWithLogger(authVerifier, log),
 			metricsInterceptor(application),
 		),
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
@@ -91,21 +108,31 @@ func New(application *app.App) (*Server, error) {
 	}
 
 	server := grpc.NewServer(serverOpts...)
+	healthServer := health.NewServer()
+	healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+	grpc_health_v1.RegisterHealthServer(server, healthServer)
+	application.RegisterDrainHook(func() {
+		healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+	})
 
 	s := &Server{
-		server: server,
-		lis:    lis,
-		app:    application,
+		server:      server,
+		lis:         lis,
+		app:         application,
+		health:      healthServer,
+		kafkaDialer: kafkaDialer,
 	}
 
-	application.Lifecycle().Register(func(ctx context.Context) error {
+	application.RegisterServerShutdown("grpc_server", func(ctx context.Context) error {
+		startedAt := time.Now()
 		log.LogService(ctx, appLog("grpc_server", "shutdown_requested", 0, "", nil))
-		err := gracefulStopWithTimeout(ctx, server)
+		err := gracefulStopWithTimeoutAndHook(ctx, server, application.LogInflightCut)
 		if err != nil {
 			log.LogService(ctx, appLog("grpc_server", "failed", 0, "graceful_stop_timeout", map[string]interface{}{
 				"error": err.Error(),
 			}))
 		}
+		application.LogShutdownPhase("grpc_server", startedAt, err)
 		return err
 	})
 
@@ -123,7 +150,77 @@ func (s *Server) Start() error {
 	log.LogService(context.Background(), appLog("grpc_server", "started", 0, "", map[string]interface{}{
 		"address": s.lis.Addr().String(),
 	}))
+	monitorCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.monitorHealth(monitorCtx)
 	return s.server.Serve(s.lis)
+}
+
+func (s *Server) monitorHealth(ctx context.Context) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		if s.app.IsDraining() {
+			s.health.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+		} else {
+			checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			ready := grpcDependenciesReady(checkCtx, s.app, s.kafkaDialer)
+			cancel()
+			if ready && !s.app.IsDraining() {
+				s.health.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
+			} else {
+				s.health.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func grpcDependenciesReady(ctx context.Context, application *app.App, kafkaDialer *kafka.Dialer) bool {
+	cfg := application.Config()
+	for name, databaseConfig := range cfg.Databases {
+		if !databaseConfig.Required {
+			continue
+		}
+		db := application.SQLByName(name)
+		if db == nil || db.PingContext(ctx) != nil {
+			return false
+		}
+	}
+	if cfg.Redis.Enabled {
+		cache := application.RedisCache()
+		if cache == nil || cache.Health(ctx) != nil {
+			return false
+		}
+	}
+	if cfg.Memcached.Enabled {
+		cache := application.MemcachedCache()
+		if cache == nil || cache.Health(ctx) != nil {
+			return false
+		}
+	}
+	if cfg.Kafka.Enabled {
+		ready := false
+		if kafkaDialer == nil {
+			return false
+		}
+		for _, broker := range cfg.Kafka.Brokers {
+			connection, err := kafkaDialer.DialContext(ctx, "tcp", broker)
+			if err == nil {
+				_ = connection.Close()
+				ready = true
+				break
+			}
+		}
+		if !ready {
+			return false
+		}
+	}
+	return true
 }
 
 func appLog(operation string, status string, durationMs int64, errorCode string, metadata map[string]interface{}) logger.ServiceLog {
@@ -142,6 +239,10 @@ type grpcStopper interface {
 }
 
 func gracefulStopWithTimeout(ctx context.Context, server grpcStopper) error {
+	return gracefulStopWithTimeoutAndHook(ctx, server, nil)
+}
+
+func gracefulStopWithTimeoutAndHook(ctx context.Context, server grpcStopper, onTimeout func()) error {
 	done := make(chan struct{})
 	go func() {
 		server.GracefulStop()
@@ -152,6 +253,9 @@ func gracefulStopWithTimeout(ctx context.Context, server grpcStopper) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
+		if onTimeout != nil {
+			onTimeout()
+		}
 		server.Stop()
 		<-done
 		return ctx.Err()

@@ -12,6 +12,8 @@ import (
 	"github.com/yogayulanda/go-core/logger"
 	"github.com/yogayulanda/go-core/messaging"
 	"github.com/yogayulanda/go-core/observability"
+	"github.com/yogayulanda/go-core/observability/diagnostics"
+	coreversion "github.com/yogayulanda/go-core/version"
 )
 
 var newDatabaseFn = database.New
@@ -22,6 +24,7 @@ type App struct {
 	logger    logger.Logger
 	metrics   *observability.Metrics
 	lifecycle *Lifecycle
+	runtime   *runtimeState
 
 	dbs            map[string]*database.DB
 	redisCache     cache.Cache
@@ -41,13 +44,29 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	startedAt := time.Now()
 
 	// 1. Logger
-	log, err := logger.New(cfg.App.ServiceName, cfg.App.LogLevel)
+	log, err := logger.New(cfg.App.ServiceName, cfg.App.LogLevel,
+		logger.WithEnvironment(cfg.App.Environment),
+		logger.WithConfig(logger.Config{
+			MaskKeys:             cfg.Log.MaskKeys,
+			RequestStart:         cfg.Log.RequestStart,
+			SlowQueryThreshold:   cfg.Log.SlowQueryThreshold,
+			SlowRequestThreshold: cfg.Log.SlowRequestThreshold,
+		}),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("init logger failed: %w", err)
 	}
+	logIgnoredEnvironmentVariables(ctx, log, cfg.IgnoredEnvVars)
+	if cfg.App.DrainDelay+cfg.App.ShutdownTimeout > 28*time.Second {
+		log.Warn(ctx, "shutdown budget may exceed default pod grace period",
+			logger.Field{Key: "drain_delay", Value: cfg.App.DrainDelay.String()},
+			logger.Field{Key: "shutdown_timeout", Value: cfg.App.ShutdownTimeout.String()},
+		)
+	}
+	log.Info(ctx, "effective_config", effectiveConfigFields(cfg)...)
 
 	// 2. Metrics
-	metrics := observability.NewMetrics()
+	metrics := observability.NewMetrics(cfg.Metrics.Enabled)
 
 	// 3. Lifecycle
 	lifecycle := NewLifecycle(cfg.App.ShutdownTimeout, log)
@@ -63,7 +82,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	dbs := make(map[string]*database.DB)
 	for rawName, dbCfg := range cfg.Databases {
 		name := config.NormalizeDBAlias(rawName)
-		db, err := newDatabaseFn(dbCfg, log)
+		db, err := newDatabaseFn(dbCfg, log, database.WithSlowQueryThreshold(cfg.Log.SlowQueryThreshold))
 		if err != nil {
 			if dbCfg.Required {
 				return nil, fmt.Errorf("init database[%s] failed: %w", name, err)
@@ -116,9 +135,23 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		logger:         log,
 		metrics:        metrics,
 		lifecycle:      lifecycle,
+		runtime:        newRuntimeState(),
 		dbs:            dbs,
 		redisCache:     redisClient,
 		memcachedCache: memcachedClient,
+	}
+	if cfg.Diagnostics.Enabled {
+		diagnosticsCtx, cancelDiagnostics := context.WithCancel(context.Background())
+		diagnostics.New(diagnostics.Config{
+			HeapThresholdPercent: cfg.Diagnostics.HeapThresholdPercent,
+			GoroutineThreshold:   cfg.Diagnostics.GoroutineThreshold,
+			Cooldown:             cfg.Diagnostics.Cooldown,
+			CheckInterval:        cfg.Diagnostics.CheckInterval,
+		}, log).Start(diagnosticsCtx)
+		lifecycle.Register(func(context.Context) error {
+			cancelDiagnostics()
+			return nil
+		})
 	}
 
 	log.LogService(ctx, logger.ServiceLog{
@@ -126,6 +159,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		Status:     "success",
 		DurationMs: time.Since(startedAt).Milliseconds(),
 		Metadata: map[string]interface{}{
+			"service.version":    coreversion.Version,
 			"database_count":     len(dbs),
 			"redis_enabled":      cfg.Redis.Enabled,
 			"memcached_enabled":  cfg.Memcached.Enabled,
@@ -136,6 +170,15 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	})
 
 	return application, nil
+}
+
+func logIgnoredEnvironmentVariables(ctx context.Context, log logger.Logger, names []string) {
+	if len(names) == 0 {
+		return
+	}
+	log.Warn(ctx, "ignored removed environment variables",
+		logger.Field{Key: "environment_variables", Value: names},
+	)
 }
 
 //
@@ -263,6 +306,13 @@ func (a *App) Start(ctx context.Context) error {
 		Operation: "app_runtime",
 		Status:    "shutdown_requested",
 	})
+	drainStartedAt := time.Now()
+	a.BeginDrain()
+	if a.cfg.App.DrainDelay > 0 {
+		timer := time.NewTimer(a.cfg.App.DrainDelay)
+		<-timer.C
+	}
+	a.LogShutdownPhase("drain_delay", drainStartedAt, nil)
 
 	shutdownCtx, cancel := context.WithTimeout(
 		context.Background(),

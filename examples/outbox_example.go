@@ -41,6 +41,21 @@ func WriteRecordAndQueueEventExample(
 	})
 }
 
+// PublishAuditEventExample stores CloudEvents metadata and payload in the caller's transaction.
+func PublishAuditEventExample(ctx context.Context, tx *sql.Tx, publisher *outbox.Publisher) error {
+	return publisher.PublishAudit(ctx, tx, outbox.AuditEvent{
+		Topic:       "account.changed.v1",
+		SpecVersion: "1.0",
+		ID:          "11111111-1111-4111-8111-111111111111",
+		Type:        "account.changed.v1",
+		Source:      "/accounts/example",
+		Time:        time.Now().UTC(),
+		Subject:     "account-example",
+		Sequence:    "1",
+		Data:        []byte(`{"state":"changed"}`),
+	})
+}
+
 // StartOutboxWorkerExample shows explicit service-owned worker startup.
 func StartOutboxWorkerExample(
 	ctx context.Context,
