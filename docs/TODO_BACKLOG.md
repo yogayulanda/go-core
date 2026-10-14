@@ -9,16 +9,32 @@ This backlog tracks work intentionally left outside the completed foundation upd
 
 ## Operational Follow-Up
 
+- Test tidak idempoten saat `-count>1`: 15 tests failed on repeated runs because tests share process-global state. Suspected causes by area: response-code registry tests do not isolate or unregister global registrations; gateway and messaging metrics tests reuse global Prometheus collectors/registries; Kafka observability tests retain global metric state; outbox worker metric assertions depend on prior global observations; HTTP client identity/deadline behavior and concurrent error lookup may share mutable package state or timing-sensitive state. Reproduce each test in isolation and repeated, then add reset/isolation fixtures; do not rely on this list as a confirmed root-cause diagnosis.
+	- `TestClient_PropagatesIdentityUsesDeadlineAndDoesNotRetry`
+	- `TestCustomErrorHandler_RegisteredHTTPStatusOverridesGRPCDefault`
+	- `TestHTTPMetricsUseMatchedTemplateAndBoundUnmatchedRoutes`
+	- `TestKafkaConsumer_ObservabilityCommitFailed`
+	- `TestKafkaConsumer_ObservabilityDLQSuccessAndFetchFailed`
+	- `TestKafkaConsumer_ObservabilitySuccess`
+	- `TestKafkaPublisher_ObservabilityFailureAndDLQ`
+	- `TestKafkaPublisher_ObservabilitySuccess`
+	- `TestLookupConcurrentReads`
+	- `TestMessagingMetricRecordingDisabledByDefault`
+	- `TestWorkerRunOnce_CommitFailure_ReturnsError`
+	- `TestWorkerRunOnce_EmptyBatch_EmitsMetric`
+	- `TestWorkerRunOnce_PublishFailure_ReturnsError`
+	- `TestWorkerRunOnce_SuccessBatch_EmitsMetric`
+	- `TestSuccessEnvelope_PendingCodeUsesRegistry`
 - Run `go test -tags=integration ./messaging/outbox/...` against disposable SQL Server and MySQL instances. Integration tests compile but were not run in the implementation environment because Docker was unavailable (S8).
 - Confirm which SASL mechanism the deployment's Kafka cluster uses. The library supports PLAIN, SCRAM-SHA-256, and SCRAM-SHA-512.
-- Reassess residual dependency advisories in `SECURITY_ADVISORIES.md` when a Go 1.26.x build image is available; current fixes requiring Go 1.25+ are intentionally deferred.
+- Reassess residual dependency advisories in `SECURITY_ADVISORIES.md` on each Go toolchain patch and minor upgrade.
 - Confirm deployment termination grace period exceeds `DrainDelay + ShutdownTimeout` (default total 28 seconds, below the common 30-second value but leaves little margin).
 
 ## Deferred Platform Work
 
-- Go 1.26.x toolchain upgrade requires a new build image. Keep `go 1.24.3` in `go.mod`; the current image target is Go 1.24.13.
+- Rolling N-1 Go policy: use the latest patch of Go N-1, advance minor when Go releases in February/August, and apply security patches within 14 days. Set the `go` directive to the minimum required by the selected dependency graph (`go mod tidy`), not the installed patch version.
 - GitLab CI (`GC-02`): add the separately approved GitLab pipeline; current CI remains GitHub Actions.
-- Migrate golangci-lint to v2 after compatibility and config review; current validated version is v1.64.8.
+- Keep the pinned golangci-lint release compatible with the current Go toolchain and config schema.
 - Inbox helper (`GC-37`) and protovalidate integration (`GC-38`) remain deferred.
 - `GC-23` and `GC-24` are resolved: OTLP to Elastic APM Server without an agent; metrics default false, endpoint/recording gated, transaction counter removed.
 - Dashboard, alert thresholds, data retention, and client-IP privacy retention remain deployment/platform responsibilities.

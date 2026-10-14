@@ -1,0 +1,73 @@
+PASS
+ok  	github.com/yogayulanda/go-core/app	0.021s
+PASS
+ok  	github.com/yogayulanda/go-core/cache	0.010s
+PASS
+ok  	github.com/yogayulanda/go-core/config	0.008s
+PASS
+ok  	github.com/yogayulanda/go-core/coretest	0.015s
+PASS
+ok  	github.com/yogayulanda/go-core/database	0.012s
+PASS
+ok  	github.com/yogayulanda/go-core/dbtx	0.009s
+PASS
+ok  	github.com/yogayulanda/go-core/errors	0.010s
+PASS
+ok  	github.com/yogayulanda/go-core/examples	0.022s
+PASS
+ok  	github.com/yogayulanda/go-core/grpcclient	0.011s
+PASS
+ok  	github.com/yogayulanda/go-core/httpclient	0.013s
+PASS
+ok  	github.com/yogayulanda/go-core/logger	0.010s
+PASS
+ok  	github.com/yogayulanda/go-core/messaging	0.011s
+PASS
+ok  	github.com/yogayulanda/go-core/messaging/internal/kafkatls	0.007s
+PASS
+ok  	github.com/yogayulanda/go-core/messaging/outbox	0.092s
+PASS
+ok  	github.com/yogayulanda/go-core/migration	0.011s
+PASS
+ok  	github.com/yogayulanda/go-core/observability	0.007s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/observability/diagnostics
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkPeriodicCheck-6                  	 3471384	       357.6 ns/op	      48 B/op	       1 allocs/op
+BenchmarkPeriodicCheck-6                  	 3076552	       347.2 ns/op	      48 B/op	       1 allocs/op
+BenchmarkPeriodicCheck-6                  	 3796140	       325.0 ns/op	      48 B/op	       1 allocs/op
+BenchmarkPeriodicCheck-6                  	 3517132	       327.1 ns/op	      48 B/op	       1 allocs/op
+BenchmarkPeriodicCheck-6                  	 3737118	       332.0 ns/op	      48 B/op	       1 allocs/op
+BenchmarkPeriodicCheck-6                  	 3465673	       318.7 ns/op	      48 B/op	       1 allocs/op
+BenchmarkPeriodicCheck-6                  	 3748930	       327.6 ns/op	      48 B/op	       1 allocs/op
+BenchmarkPeriodicCheck-6                  	 3722721	       303.0 ns/op	      48 B/op	       1 allocs/op
+BenchmarkPeriodicCheck-6                  	 3681570	       298.5 ns/op	      48 B/op	       1 allocs/op
+BenchmarkPeriodicCheck-6                  	 3961875	       302.9 ns/op	      48 B/op	       1 allocs/op
+BenchmarkSnapshot5000ParkedGoroutines-6   	      81	  15840677 ns/op	         0 gc-pause-upper-bound-ns	  11229129 snapshot-ns	 2904102 B/op	   12891 allocs/op
+BenchmarkSnapshot5000ParkedGoroutines-6   	      68	  17267595 ns/op	     98304 gc-pause-upper-bound-ns	  15698860 snapshot-ns	 2959744 B/op	   13674 allocs/op
+BenchmarkSnapshot5000ParkedGoroutines-6   	      63	  16797060 ns/op	     49152 gc-pause-upper-bound-ns	  19847981 snapshot-ns	 3320160 B/op	   15615 allocs/op
+BenchmarkSnapshot5000ParkedGoroutines-6   	      69	  16085135 ns/op	         0 gc-pause-upper-bound-ns	  11879266 snapshot-ns	 3386296 B/op	   16971 allocs/op
+BenchmarkSnapshot5000ParkedGoroutines-6   	      60	  18640054 ns/op	     32768 gc-pause-upper-bound-ns	  14845581 snapshot-ns	 3429562 B/op	   17715 allocs/op
+BenchmarkSnapshot5000ParkedGoroutines-6   	      69	  16815380 ns/op	     24576 gc-pause-upper-bound-ns	  13734738 snapshot-ns	 3463394 B/op	   18594 allocs/op
+BenchmarkSnapshot5000ParkedGoroutines-6   	      66	  17999724 ns/op	     40960 gc-pause-upper-bound-ns	  13846193 snapshot-ns	 3792653 B/op	   19208 allocs/op
+BenchmarkSnapshot5000ParkedGoroutines-6   	      67	  20470969 ns/op	     49152 gc-pause-upper-bound-ns	  17710662 snapshot-ns	 4111806 B/op	   20800 allocs/op
+BenchmarkSnapshot5000ParkedGoroutines-6   	      66	  19209314 ns/op	     32768 gc-pause-upper-bound-ns	  17400998 snapshot-ns	 4155900 B/op	   21776 allocs/op
+BenchmarkSnapshot5000ParkedGoroutines-6   	      52	  19771017 ns/op	    229376 gc-pause-upper-bound-ns	  16642056 snapshot-ns	 4169702 B/op	   22026 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/observability/diagnostics	31.627s
+PASS
+ok  	github.com/yogayulanda/go-core/resilience	0.007s
+PASS
+ok  	github.com/yogayulanda/go-core/response	0.008s
+PASS
+ok  	github.com/yogayulanda/go-core/security	0.006s
+PASS
+ok  	github.com/yogayulanda/go-core/server	0.014s
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	0.012s
+PASS
+ok  	github.com/yogayulanda/go-core/server/grpc	0.012s
+?   	github.com/yogayulanda/go-core/templates	[no test files]
+PASS
+ok  	github.com/yogayulanda/go-core/version	0.003s

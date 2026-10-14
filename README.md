@@ -51,7 +51,7 @@ The intended service shape remains conventional Go:
 
 ## Tech Stack
 
-- Go 1.24+
+- Go 1.26.0+
 - gRPC and grpc-gateway
 - GORM with SQL Server and MySQL support
 - Goose migrations
@@ -67,7 +67,7 @@ The intended service shape remains conventional Go:
 
 Requirements:
 
-- Go 1.24 or newer
+- Go 1.26.0 or newer
 - `make`
 - Optional: `golangci-lint` for linting
 - Optional: `k6` for load-gate scripts
@@ -85,7 +85,7 @@ make vet
 Install the linter used by the repository:
 
 ```bash
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 make lint
 ```
 
@@ -320,7 +320,7 @@ BASE_URL=https://staging.example.com TARGET_PATH=/health make load-steady
 
 Use `docs/PRODUCTION_SIGNOFF.md` and `docs/RELEASE_EVIDENCE_TEMPLATE.md` when preparing a production service release that consumes this module.
 
-Downstream forks may adjust the module path before adoption. `Q-SIG` confirmation is deferred but is not a release blocker. GC-23 uses OpenTelemetry OTLP to Elastic APM Server; GC-24 metrics are opt-in via `METRICS_ENABLED` (default false). The source directive stays Go 1.24.3; the current build image uses Go 1.24.13 and the next upgrade target is 1.26.x.
+Downstream forks may adjust the module path before adoption. `Q-SIG` confirmation is deferred but is not a release blocker. GC-23 uses OpenTelemetry OTLP to Elastic APM Server; GC-24 metrics are opt-in via `METRICS_ENABLED` (default false). Consumers must use Go 1.26.0 or newer; CI validates with Go 1.26.9. See `MIGRATION.md` for Go runtime and library behavior changes.
 
 Set build metadata with `-ldflags` when building a service that exposes `/version`:
 

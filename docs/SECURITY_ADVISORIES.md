@@ -1,100 +1,54 @@
 # Security Advisories
 
-## Scope
+## Scan Results
 
-Assessment refreshed with `govulncheck` on 2026-10-14 using `GOTOOLCHAIN=go1.24.13`. The scanner binary was built with Go 1.26.9, but the analyzed module/toolchain target was Go 1.24.13. The repository directive remains `go 1.24.3`.
+Scanned 2026-10-14 with govulncheck v1.9.0 and Go 1.26.9. The vulnerability database was last updated 2026-10-08. Pre-upgrade scan on Go 1.24.13 reported 39 called vulnerabilities across five modules and the standard library, plus 7 imported-only package findings and 29 module-only findings. After the toolchain and dependency upgrades, the scan reports **0 called vulnerabilities**, **0 vulnerable imported packages**, and **1 vulnerable required module without a call trace**.
 
-`called` means govulncheck reported a source call trace into the affected package/symbol. `imported only` means the module or standard-library package was reported without such a trace. A call trace is reachability evidence, not proof of exploitability; absence of a trace is not proof that a package cannot be reached dynamically.
+`called` means govulncheck found a source call trace to the affected symbol. `imported only` means a vulnerable package/module is in the dependency graph without a reported call trace. These are reachability signals, not proof of exploitability or proof that dynamic reachability is impossible.
 
-## Remediated
+## Remaining Finding
 
-| Advisory | Package | Selected version | Required Go | Status |
-|---|---|---:|---:|---|
-| GO-2026-4762 | `google.golang.org/grpc` | v1.79.3 | 1.24.0 | fixed; scanner no longer reports it |
-| GO-2026-5506 | `go.opentelemetry.io/otel`, `/trace`, `/metric` | v1.41.0 | 1.24.0 | fixed; scanner no longer reports it |
-| GO-2026-5841 | `github.com/klauspost/compress` | v1.18.7 | 1.24.0 | fixed; scanner no longer reports it |
+| Advisory | Module/package | Selected version | Status |
+|---|---|---:|---|
+| GO-2026-5932 | `golang.org/x/crypto/openpgp` | x/crypto v0.57.0 | Module-only; no upstream fix. The deprecated OpenPGP package is unmaintained and unsafe by design; no call trace was found. |
 
-All selected fixes are stable releases older than two weeks and are compatible with Go 1.24.
+## Dependency Upgrades
 
-## Third-Party Modules
+Selected advisory fixes and their required graph versions are listed below. Release ages are measured at 2026-10-14. The x/net v0.60.0 security minimum is a documented exception to the usual 14-day age preference, approved because it is an official golang.org/x fix and necessary to resolve called advisories.
 
-Fix versions below are the lowest stable versions identified by the advisory database for the affected packages. Fixes requiring Go 1.25 or newer are deferred under the current Go 1.24.13 image constraint.
+| Module | From | To | Release date | Age (days) | Reason |
+|---|---:|---:|---:|---:|---|
+| `golang.org/x/net` | v0.49.0 | v0.60.0 | 2026-10-08 | 6 | Advisory fix minimum; approved <14-day security exception. |
+| `golang.org/x/crypto` | v0.47.0 | v0.57.0 | 2026-09-08 | 36 | Advisory minimum was v0.56.0; v0.57.0 is required by x/net v0.60.0. |
+| `golang.org/x/sys` | v0.40.0 | v0.48.0 | 2026-08-31 | 44 | Advisory minimum was v0.44.0; v0.48.0 is required by x/net/x/crypto. |
+| `golang.org/x/text` | v0.34.0 | v0.42.0 | 2026-09-08 | 36 | Advisory minimum was v0.41.0; v0.42.0 is required by x/net/x/crypto. |
+| `google.golang.org/grpc` | v1.79.3 | v1.83.2 | 2026-08-25 | 50 | Advisory fixes; v1.83.2 also fixes GO-2026-6443 found by the first post-upgrade scan. |
+| `go.opentelemetry.io/otel` | v1.41.0 | v1.45.0 | 2026-08-03 | 72 | Advisory fix minimum. |
+| `go.opentelemetry.io/otel/trace` | v1.41.0 | v1.45.0 | 2026-08-03 | 72 | Aligned with OTel release. |
+| `go.opentelemetry.io/otel/metric` | v1.41.0 | v1.45.0 | 2026-08-03 | 72 | Aligned with OTel release. |
+| `go.opentelemetry.io/otel/sdk` | v1.40.0 | v1.45.0 | 2026-08-03 | 72 | Advisory fix minimum. |
+| `go.opentelemetry.io/otel/exporters/otlp/otlptrace` | v1.40.0 | v1.45.0 | 2026-08-03 | 72 | Aligned with OTel SDK/exporter fix. |
+| `go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc` | v1.40.0 | v1.45.0 | 2026-08-03 | 72 | Advisory fix minimum. |
 
-| Advisory | Affected package | Current version | Fixed version | Required Go | Status |
-|---|---|---:|---:|---:|---|
-| GO-2026-4918 | `golang.org/x/net/http2` | x/net v0.49.0 | x/net v0.53.0 | 1.25.0 | imported only |
-| GO-2026-5025, GO-2026-5027, GO-2026-5028, GO-2026-5029, GO-2026-5030 | `golang.org/x/net/html` | x/net v0.49.0 | x/net v0.55.0 | 1.25.0 | imported only |
-| GO-2026-5026 | `golang.org/x/net/idna` | x/net v0.49.0 | x/net v0.55.0 | 1.25.0 | imported only |
-| GO-2026-5942 | `golang.org/x/net/dns/dnsmessage` | x/net v0.49.0 | x/net v0.56.0 | 1.25.0 | imported only |
-| GO-2026-6603, GO-2026-6611, GO-2026-6612, GO-2026-6617 | `golang.org/x/net/http2` | x/net v0.49.0 | x/net v0.60.0 | 1.26.0 | called |
-| GO-2026-6610 | `golang.org/x/net/http2` | x/net v0.49.0 | x/net v0.60.0 | 1.26.0 | imported only |
-| GO-2026-5005, GO-2026-5006, GO-2026-5033 | `golang.org/x/crypto/ssh/agent` | x/crypto v0.47.0 | x/crypto v0.52.0 | 1.25.0 | imported only |
-| GO-2026-5013, GO-2026-5014, GO-2026-5015, GO-2026-5016, GO-2026-5017, GO-2026-5018, GO-2026-5019, GO-2026-5020, GO-2026-5023 | `golang.org/x/crypto/ssh` | x/crypto v0.47.0 | x/crypto v0.52.0 | 1.25.0 | imported only |
-| GO-2026-5021 | `golang.org/x/crypto/ssh/knownhosts` | x/crypto v0.47.0 | x/crypto v0.52.0 | 1.25.0 | imported only |
-| GO-2026-6303 | `golang.org/x/crypto/ssh` | x/crypto v0.47.0 | x/crypto v0.55.0 | 1.25.0 | imported only |
-| GO-2026-6354, GO-2026-6355 | `golang.org/x/crypto/ssh` | x/crypto v0.47.0 | x/crypto v0.56.0 | 1.26.0 | imported only |
-| GO-2026-5932 | `golang.org/x/crypto/openpgp` and subpackages | x/crypto v0.47.0 | no fix available | n/a | imported only |
-| GO-2026-5024 | `golang.org/x/sys/windows` | x/sys v0.40.0 | x/sys v0.44.0 | 1.25.0 | imported only |
-| GO-2026-5970 | `golang.org/x/text/unicode/norm` | x/text v0.34.0 | x/text v0.39.0 | 1.25.0 | called |
-| GO-2026-6629 | `golang.org/x/text/secure/precis` | x/text v0.34.0 | x/text v0.41.0 | 1.25.0 | imported only |
-| GO-2026-6061 | `google.golang.org/grpc/internal/transport`, `internal/xds/rbac` | grpc v1.79.3 | grpc v1.82.1 | 1.25.0 | called |
-| GO-2026-6443 | `google.golang.org/grpc/internal/transport`, `internal/xds/server` | grpc v1.79.3 | grpc v1.82.2 | 1.25.0 | called |
-| GO-2026-6348 | `google.golang.org/grpc/internal/transport`, `grpc/mem` | grpc v1.79.3 | grpc v1.83.1 | 1.25.0 | called |
-| GO-2026-6441 | `google.golang.org/grpc/internal/xds/httpfilter/rbac` | grpc v1.79.3 | grpc v1.83.1 | 1.25.0 | imported only |
-| GO-2026-5158 | `go.opentelemetry.io/otel/baggage`, `/propagation` | otel v1.41.0 | otel v1.42.0 | 1.25.0 | called |
-| GO-2026-5426 | `go.opentelemetry.io/otel/sdk/resource` | sdk v1.40.0 | sdk v1.43.0 | 1.25.0 | called |
-| GO-2026-6505 | OTLP trace exporter modules and `go.opentelemetry.io/otel/sdk` | v1.40.0 | v1.45.0 | 1.25.0 | called |
+Additional transitive upgrades:
 
-GO-2026-5932 concerns the deprecated, unmaintained OpenPGP implementation and has no upstream fix version. It remains listed even though govulncheck found no source call trace.
+| Module | From | To | Release date | Age (days) | Why |
+|---|---:|---:|---:|---:|---|
+| `github.com/grpc-ecosystem/grpc-gateway/v2` | v2.27.8 | v2.29.0 | 2026-04-15 | 182 | Required by grpc dependency graph. |
+| `github.com/go-logr/logr` | v1.4.3 | v1.4.4 | 2026-07-20 | 86 | Required by OTel dependency graph. |
+| `go.opentelemetry.io/proto/otlp` | v1.9.0 | v1.11.0 | 2026-07-22 | 84 | Required by OTel exporter. |
+| `golang.org/x/sync` | v0.19.0 | v0.23.0 | 2026-08-31 | 44 | Required by the selected security dependency graph. |
+| `google.golang.org/genproto/googleapis/api` | 2026-02-09 revision | 2026-08-03 revision | 2026-08-03 | 72 | Required by grpc/gateway graph. |
+| `google.golang.org/genproto/googleapis/rpc` | 2026-02-09 revision | 2026-08-03 revision | 2026-08-03 | 72 | Required by grpc graph. |
 
 ## Go Standard Library
 
-These findings are evaluated against Go 1.24.13. The “fixed Go” column is the lowest stable Go toolchain version listed as fixed by the advisory database; it is not a dependency-module minimum. All fixes are newer than the current Go 1.24.13 image. Rows with multiple IDs share the same package, fix release, and reachability status.
+Go 1.26.9 resolves the standard-library findings recorded by the previous Go 1.24.13 scan, including `net/url`, `net/http`, `crypto/tls`, `crypto/x509`, `os`, `html/template`, `mime/multipart`, `net/textproto`, and `encoding/asn1/xml`. No standard-library advisory remains in the current govulncheck result.
 
-| Advisory | Affected package | Fixed Go | Status |
-|---|---|---:|---|
-| GO-2026-4601 | `net/url` | 1.25.8 | called |
-| GO-2026-4602 | `os` | 1.25.8 | called |
-| GO-2026-4603 | `html/template` | 1.25.8 | called |
-| GO-2026-4864 | `internal/syscall/unix` | 1.25.9 | imported only |
-| GO-2026-4865 | `html/template` | 1.25.9 | called |
-| GO-2026-4869 | `archive/tar` | 1.25.9 | imported only |
-| GO-2026-4870 | `crypto/tls` | 1.25.9 | called |
-| GO-2026-4946, GO-2026-4947 | `crypto/x509` | 1.25.9 | called |
-| GO-2026-4970 | `os` | 1.25.12 | imported only |
-| GO-2026-4971 | `net` | 1.25.10 | called |
-| GO-2026-4976 | `net/http/httputil` | 1.25.10 | imported only |
-| GO-2026-4977, GO-2026-4986 | `net/mail` | 1.25.10 | imported only |
-| GO-2026-4980, GO-2026-4982 | `html/template` | 1.25.10 | called |
-| GO-2026-4981 | `net` | 1.25.10 | imported only |
-| GO-2026-5026 | `net/http`, `net/http/internal/http2` | 1.25.13 | called |
-| GO-2026-5037 | `crypto/x509` | 1.25.11 | called |
-| GO-2026-5038 | `mime` | 1.25.11 | imported only |
-| GO-2026-5039 | `net/textproto` | 1.25.11 | called |
-| GO-2026-5856 | `crypto/tls` | 1.25.12 | called |
-| GO-2026-5972 | `encoding/asn1` | 1.25.13 | called |
-| GO-2026-6088 | `encoding/xml` | 1.25.13 | called |
-| GO-2026-6089 | `net/http` | 1.25.13 | called |
-| GO-2026-6090 | `crypto/tls` | 1.25.13 | called |
-| GO-2026-6091 | `html/template` | 1.25.13 | called |
-| GO-2026-6218 | `net/url` | 1.25.13 | called |
-| GO-2026-4918 | `net/http` (stdlib) | 1.25.10 | called |
-| GO-2026-5942 | `net` | 1.26.6 | imported only |
-| GO-2026-6599, GO-2026-6600 | `html/template` | 1.26.9 | called |
-| GO-2026-6603 | `net/http`, `net/http/internal/http2` | 1.26.9 | called |
-| GO-2026-6604 | `internal/syscall/windows`, `os` | 1.26.9 | imported only |
-| GO-2026-6605 | `net/http`, `net/http/httputil` | 1.26.9 | called |
-| GO-2026-6607 | `crypto/tls` | 1.26.9 | called |
-| GO-2026-6608 | `mime/multipart`, `net/textproto` | 1.26.9 | called |
-| GO-2026-6609 | `net/http` | 1.26.9 | imported only |
-| GO-2026-6610 | `net/http`, `net/http/internal/http2` | 1.26.9 | called |
-| GO-2026-6611, GO-2026-6612 | `net/http`, `net/http/internal/http2` | 1.26.9 | called |
-| GO-2026-6613 | `net/http` | 1.26.9 | called |
-| GO-2026-6617 | `net/http`, `net/http/internal/http2` | 1.26.9 | called |
+## Rolling N-1 Policy
 
-## Image and Upgrade Plan
-
-- Keep the source directive at `go 1.24.3`.
-- Use Go 1.24.13 for the current deployment image; it is the final patch release for the Go 1.24 line.
-- Plan the next toolchain/image upgrade to Go 1.26.x, not Go 1.27. Re-evaluate the deferred module upgrades against that image before upgrading dependencies.
-- No major dependency upgrades or fixes requiring Go 1.25+ were included in this remediation.
+- Use the latest patch release in the N-1 Go minor line. Advance the minor target with Go's February/August releases.
+- Apply Go security patches no later than 14 days after release.
+- Set the `go` directive to the minimum required by the selected dependency graph, as determined by `go mod tidy`; do not copy the installed toolchain patch into the directive.
+- Prefer stable dependency versions older than 14 days. An official maintainer's minimum security fix may be used sooner when required to remediate an advisory; document the exception, release date, and age.
+- Re-run govulncheck after dependency or toolchain changes and retain imported-only/no-fix findings explicitly.

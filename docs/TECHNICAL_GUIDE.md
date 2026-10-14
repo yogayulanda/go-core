@@ -70,4 +70,4 @@ Consumer concurrency is keyed by partition: a partition has one FIFO worker, and
 
 Tracing is OpenTelemetry OTLP to Elastic APM Server via `APM_ENDPOINT`; no Elastic APM agent is used and logs do not include `transaction.id`. Metrics are disabled by default; set `METRICS_ENABLED=true` to record metrics and register `/metrics`. `app_transaction_total` is removed.
 
-Downstream forks may adjust the module path before adoption. `Q-SIG` confirmation is deferred but is not a release blocker. Keep `go 1.24.3` in `go.mod`; the current build image uses Go 1.24.13 and the next upgrade target is Go 1.26.x.
+Downstream forks may adjust the module path before adoption. `Q-SIG` confirmation is deferred but is not a release blocker. Consumers need Go 1.26.0 or newer; CI validates with Go 1.26.9. The rolling N-1 toolchain and security-patch policy is described in `MIGRATION.md`.

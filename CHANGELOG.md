@@ -9,6 +9,14 @@ This changelog complements:
 
 ## [Unreleased]
 
+## [1.2.0] - Unreleased
+
+### Changed
+- Require Go 1.26.0 or newer as determined by the dependency graph; validate builds and CI with Go 1.26.9.
+- Upgrade advisory-listed dependencies and pin golangci-lint v2.14.0 with its v2 configuration.
+- Adopt the rolling N-1 toolchain policy; see `MIGRATION.md` and `docs/SECURITY_ADVISORIES.md`.
+- Go 1.25/1.26 runtime and standard-library defaults can change container CPU parallelism, GC behavior, TLS handshakes, certificate parsing, and malformed URL handling; consumers should run the checks documented in `MIGRATION.md`.
+
 ## [1.1.0] - 2026-10-14
 
 This release records the completed foundation refresh and its consumer-visible compatibility changes.
