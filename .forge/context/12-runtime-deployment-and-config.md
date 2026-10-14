@@ -11,7 +11,7 @@
 - Runtime configuration model, enablement profiles, release metadata expectations, and deployment-facing constraints exposed by the repo.
 
 ## Current Context
-- The module targets Go `1.24.3` and is configured primarily through environment variables.
+- The module declares the minimum Go version required by its dependency graph (`go 1.26.0`); CI and release validation use the Go 1.26.9 patch toolchain. Runtime configuration is primarily environment-driven.
 
 ## Confirmed Facts
 - `SERVICE_NAME` and `APP_ENV` are required by validation. `LOG_LEVEL`, `GRPC_PORT`, and `HTTP_PORT` have defaults; `SHUTDOWN_TIMEOUT` is not an environment override. `LOG_TIMEZONE` configures logger timestamp rendering.

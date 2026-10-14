@@ -1,6 +1,6 @@
 # Proposed Context Patch: GC-28 Go Toolchain Policy
 
-Status: proposed; review required; not promoted.
+Status: promoted on 2026-10-14 to `.forge/context/12-runtime-deployment-and-config.md` and `.forge/context/14-decisions-assumptions-and-constraints.md`.
 
 ## Decision
 
