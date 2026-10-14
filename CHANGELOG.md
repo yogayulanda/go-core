@@ -9,6 +9,15 @@ This changelog complements:
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-14
+
+### Fixed
+- Reject malformed non-empty integer and boolean environment values instead of silently using defaults.
+- Allow Internal JWT verification with a JWKS endpoint as the sole key source; reject configurations with both or neither key source.
+
+### Changed
+- Configuration loading now fails at startup when a non-empty integer or boolean environment value cannot be parsed.
+
 ## [1.2.0] - 2026-10-14
 
 ### Changed

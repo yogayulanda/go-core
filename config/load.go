@@ -22,12 +22,11 @@ func Load(opts ...Option) (*Config, error) {
 	for _, opt := range opts {
 		opt()
 	}
+	var invalidValues []string
+	parseInt := func(key string, defaultVal int) int { return getInt(key, defaultVal, &invalidValues) }
+	parseBool := func(key string, defaultVal bool) bool { return getBool(key, defaultVal, &invalidValues) }
 
 	serviceName := strings.TrimSpace(getString("SERVICE_NAME", ""))
-	dbs, err := loadDatabases()
-	if err != nil {
-		return nil, err
-	}
 
 	cfg := &Config{
 		App: AppConfig{
@@ -37,7 +36,7 @@ func Load(opts ...Option) (*Config, error) {
 			DrainDelay:      3 * time.Second,
 			ShutdownTimeout: 25 * time.Second,
 		},
-		Databases: dbs,
+		Databases: map[string]DBConfig{},
 		Migration: MigrationConfig{
 			AutoRun:     false,
 			DBName:      "",
@@ -47,17 +46,17 @@ func Load(opts ...Option) (*Config, error) {
 			LockTimeout: 30 * time.Second,
 		},
 		GRPC: GRPCConfig{
-			Port:        getInt("GRPC_PORT", 50051),
+			Port:        parseInt("GRPC_PORT", 50051),
 			TLSEnabled:  false,
 			TLSCertFile: "",
 			TLSKeyFile:  "",
 		},
 		HTTP: HTTPConfig{
-			Port:               getInt("HTTP_PORT", 8080),
+			Port:               parseInt("HTTP_PORT", 8080),
 			TLSEnabled:         false,
 			TLSCertFile:        "",
 			TLSKeyFile:         "",
-			PprofEnabled:       getBool("HTTP_PPROF_ENABLED", false),
+			PprofEnabled:       parseBool("HTTP_PPROF_ENABLED", false),
 			CORSAllowedOrigins: getStringSlice("HTTP_CORS_ALLOWED_ORIGINS"),
 			CORSAllowedHeaders: []string{"Content-Type", "Authorization", "X-Request-ID"},
 			ReadHeaderTimeout:  5 * time.Second,
@@ -73,7 +72,7 @@ func Load(opts ...Option) (*Config, error) {
 			OTLPCACertFile:     "",
 			TraceSamplingRatio: 0.1,
 		},
-		Metrics: MetricsConfig{Enabled: getBool("METRICS_ENABLED", false)},
+		Metrics: MetricsConfig{Enabled: parseBool("METRICS_ENABLED", false)},
 		Log: LogConfig{
 			MaskKeys:             []string{"password", "passwd", "secret", "token", "authorization", "apikey", "api_key", "pin", "otp", "cvv", "card", "private_key", "session", "phone", "msisdn", "account", "cif", "nik"},
 			RequestStart:         false,
@@ -81,7 +80,7 @@ func Load(opts ...Option) (*Config, error) {
 			SlowRequestThreshold: 3 * time.Second,
 		},
 		Diagnostics: DiagnosticsConfig{
-			Enabled:              getBool("DIAG_ENABLED", true),
+			Enabled:              parseBool("DIAG_ENABLED", true),
 			HeapThresholdPercent: 80,
 			GoroutineThreshold:   5000,
 			Cooldown:             10 * time.Minute,
@@ -124,6 +123,15 @@ func Load(opts ...Option) (*Config, error) {
 		},
 		IgnoredEnvVars: ignoredEnvironmentVariableNames(),
 	}
+	dbs, dbErr := loadDatabases(&invalidValues)
+	cfg.Databases = dbs
+	if len(invalidValues) > 0 {
+		sort.Strings(invalidValues)
+		return nil, fmt.Errorf("invalid environment values:\n%s", strings.Join(invalidValues, "\n"))
+	}
+	if dbErr != nil {
+		return nil, dbErr
+	}
 
 	return cfg, nil
 }
@@ -138,7 +146,7 @@ func loadMemcachedConfig() MemcachedConfig {
 	}
 }
 
-func loadDatabases() (map[string]DBConfig, error) {
+func loadDatabases(invalidValues *[]string) (map[string]DBConfig, error) {
 	connections := getStringSlice("DB_LIST")
 
 	dbs := make(map[string]DBConfig)
@@ -148,7 +156,16 @@ func loadDatabases() (map[string]DBConfig, error) {
 			continue
 		}
 
-		cfg := loadDatabaseByConnection(conn)
+		cfg := loadDatabaseByConnection(conn, invalidValues)
+		dbs[conn] = cfg
+	}
+
+	for _, conn := range connections {
+		conn = NormalizeDBAlias(conn)
+		if conn == "" {
+			continue
+		}
+		cfg := dbs[conn]
 		if !isSupportedDBDriver(cfg.Driver) {
 			return nil, fmt.Errorf("DB_%s_DRIVER must be sqlserver or mysql", strings.ToUpper(conn))
 		}
@@ -173,8 +190,8 @@ func validateComposeFields(name string, cfg DBConfig) error {
 	if cfg.Host == "" {
 		return fmt.Errorf("DB_%s_HOST is required when DSN is not set", strings.ToUpper(name))
 	}
-	if cfg.Port <= 0 {
-		return fmt.Errorf("DB_%s_PORT must be > 0 when DSN is not set", strings.ToUpper(name))
+	if cfg.Port < 1 || cfg.Port > 65535 {
+		return fmt.Errorf("DB_%s_PORT must be between 1 and 65535 when DSN is not set", strings.ToUpper(name))
 	}
 	if cfg.Name == "" {
 		return fmt.Errorf("DB_%s_NAME is required when DSN is not set", strings.ToUpper(name))
@@ -185,13 +202,13 @@ func validateComposeFields(name string, cfg DBConfig) error {
 	return nil
 }
 
-func loadDatabaseByConnection(name string) DBConfig {
+func loadDatabaseByConnection(name string, invalidValues *[]string) DBConfig {
 	prefix := DatabaseEnvPrefix(name)
 
 	return DBConfig{
 		Driver:          strings.ToLower(getString(prefix+"DRIVER", "")),
 		Host:            getString(prefix+"HOST", ""),
-		Port:            getInt(prefix+"PORT", 0),
+		Port:            getInt(prefix+"PORT", 0, invalidValues),
 		Name:            getString(prefix+"NAME", ""),
 		User:            getString(prefix+"USER", ""),
 		Password:        getString(prefix+"PASSWORD", ""),
@@ -270,28 +287,47 @@ func getString(key, defaultVal string) string {
 	return val
 }
 
-func getInt(key string, defaultVal int) int {
+func getInt(key string, defaultVal int, invalidValues *[]string) int {
 	val := os.Getenv(key)
 	if val == "" {
 		return defaultVal
 	}
 	parsed, err := strconv.Atoi(val)
 	if err != nil {
+		*invalidValues = append(*invalidValues, invalidEnvironmentValue(key, val, "integer between 1 and 65535"))
 		return defaultVal
 	}
 	return parsed
 }
 
-func getBool(key string, defaultVal bool) bool {
+func getBool(key string, defaultVal bool, invalidValues *[]string) bool {
 	val := os.Getenv(key)
 	if val == "" {
 		return defaultVal
 	}
 	parsed, err := strconv.ParseBool(val)
 	if err != nil {
+		*invalidValues = append(*invalidValues, invalidEnvironmentValue(key, val, "true or false (also accepted: 1, 0, t, f, TRUE, FALSE)"))
 		return defaultVal
 	}
 	return parsed
+}
+
+func invalidEnvironmentValue(key, value, expected string) string {
+	if isSecretEnvironmentKey(key) {
+		value = "<REDACTED>"
+	}
+	return fmt.Sprintf("%s=%q: expected %s", key, value, expected)
+}
+
+func isSecretEnvironmentKey(key string) bool {
+	key = strings.ToLower(strings.ReplaceAll(key, "_", ""))
+	for _, marker := range []string{"password", "masterkey", "privatekey", "keyfile", "secret", "dsn", "jksfile"} {
+		if strings.Contains(key, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func getStringSlice(key string) []string {

@@ -46,11 +46,22 @@ func NewInternalJWTVerifier(cfg config.InternalJWTConfig) (*InternalJWTVerifier,
 		return verifier, nil
 	}
 
-	if strings.TrimSpace(cfg.JWKSEndpoint) != "" {
+	hasPublicKey := strings.TrimSpace(cfg.PublicKey) != ""
+	jwksEndpoint := strings.TrimSpace(cfg.JWKSEndpoint)
+	hasJWKSEndpoint := jwksEndpoint != ""
+	if hasPublicKey == hasJWKSEndpoint {
+		message := "InternalJWT requires exactly one of PublicKey or JWKSEndpoint"
+		if hasPublicKey {
+			message += "; both are set; remove one"
+		}
+		return nil, errors.New(message)
+	}
+
+	if hasJWKSEndpoint {
 		// v3 keyfunc fetching
-		kf, err := keyfunc.NewDefault([]string{cfg.JWKSEndpoint})
+		kf, err := keyfunc.NewDefault([]string{jwksEndpoint})
 		if err != nil {
-			return nil, fmt.Errorf("failed to initialize JWKS from %s: %w", cfg.JWKSEndpoint, err)
+			return nil, fmt.Errorf("failed to initialize JWKS from %s: %w", jwksEndpoint, err)
 		}
 		verifier.keyFunc = kf.Keyfunc
 		return verifier, nil

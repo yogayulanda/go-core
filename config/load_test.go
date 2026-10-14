@@ -68,6 +68,124 @@ func TestLoad_MigrationDefaultsAreExplicit(t *testing.T) {
 	}
 }
 
+func TestLoad_InvalidNumericAndBooleanEnvironmentValues(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "GRPC_PORT", value: "80a"},
+		{name: "HTTP_PORT", value: "80a"},
+		{name: "DB_PRIMARY_PORT", value: "80a"},
+		{name: "DB_ORPHAN_PORT", value: "80a"},
+		{name: "HTTP_PPROF_ENABLED", value: "yes"},
+		{name: "METRICS_ENABLED", value: "yes"},
+		{name: "DIAG_ENABLED", value: "off"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clearConfigEnvironment(t)
+			t.Setenv("SERVICE_NAME", "svc")
+			t.Setenv("APP_ENV", "local")
+			if strings.HasPrefix(test.name, "DB_") && test.name != "DB_ORPHAN_PORT" {
+				t.Setenv("DB_LIST", "primary")
+			}
+			t.Setenv(test.name, test.value)
+
+			_, err := Load()
+			if test.name == "DB_ORPHAN_PORT" {
+				if err != nil {
+					t.Fatalf("Load() error = %v, want success for unlisted DB alias port", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.name) || !strings.Contains(err.Error(), test.value) {
+				t.Fatalf("Load() error = %v, want invalid value for %s", err, test.name)
+			}
+		})
+	}
+}
+
+func TestLoad_InvalidNumericAndBooleanValuesNameEveryEnvironmentVariable(t *testing.T) {
+	tests := []string{"GRPC_PORT", "HTTP_PORT", "DB_PRIMARY_PORT", "HTTP_PPROF_ENABLED", "METRICS_ENABLED", "DIAG_ENABLED"}
+	for _, name := range tests {
+		t.Run(name, func(t *testing.T) {
+			clearConfigEnvironment(t)
+			t.Setenv("SERVICE_NAME", "svc")
+			t.Setenv("APP_ENV", "local")
+			if name == "DB_PRIMARY_PORT" {
+				t.Setenv("DB_LIST", "primary")
+			}
+			t.Setenv(name, "x!")
+
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), name) {
+				t.Fatalf("Load() error = %v, want invalid value for %s", err, name)
+			}
+		})
+	}
+}
+
+func TestLoad_InvalidEnvironmentValuesAreAggregated(t *testing.T) {
+	clearConfigEnvironment(t)
+	t.Setenv("SERVICE_NAME", "svc")
+	t.Setenv("APP_ENV", "local")
+	t.Setenv("HTTP_PORT", "80a")
+	t.Setenv("METRICS_ENABLED", "yes")
+	t.Setenv("DB_LIST", "primary")
+	t.Setenv("DB_PRIMARY_PORT", "bad")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load() error = nil, want aggregated environment error")
+	}
+	for _, name := range []string{"DB_PRIMARY_PORT", "HTTP_PORT", "METRICS_ENABLED"} {
+		if !strings.Contains(err.Error(), name) {
+			t.Errorf("aggregated error %q does not contain %s", err, name)
+		}
+	}
+	if got := strings.Count(err.Error(), "expected "); got != 3 {
+		t.Fatalf("got %d invalid-value lines, want 3: %v", got, err)
+	}
+}
+
+func TestLoad_EmptyNumericAndBooleanEnvironmentValuesUseDefaults(t *testing.T) {
+	clearConfigEnvironment(t)
+	t.Setenv("SERVICE_NAME", "svc")
+	t.Setenv("APP_ENV", "local")
+	for _, name := range []string{"GRPC_PORT", "HTTP_PORT", "HTTP_PPROF_ENABLED", "METRICS_ENABLED", "DIAG_ENABLED"} {
+		t.Setenv(name, "")
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.GRPC.Port != 50051 || cfg.HTTP.Port != 8080 || cfg.HTTP.PprofEnabled || cfg.Metrics.Enabled || !cfg.Diagnostics.Enabled {
+		t.Fatalf("empty env values changed defaults: grpc=%d http=%d pprof=%t metrics=%t diagnostics=%t", cfg.GRPC.Port, cfg.HTTP.Port, cfg.HTTP.PprofEnabled, cfg.Metrics.Enabled, cfg.Diagnostics.Enabled)
+	}
+}
+
+func TestLoad_ParseBoolAcceptedValues(t *testing.T) {
+	for _, value := range []string{"1", "t", "T", "TRUE", "true", "True", "0", "f", "F", "FALSE", "false", "False"} {
+		t.Run(value, func(t *testing.T) {
+			clearConfigEnvironment(t)
+			t.Setenv("SERVICE_NAME", "svc")
+			t.Setenv("APP_ENV", "local")
+			t.Setenv("METRICS_ENABLED", value)
+			if _, err := Load(); err != nil {
+				t.Fatalf("Load() rejected strconv.ParseBool value %q: %v", value, err)
+			}
+		})
+	}
+}
+
+func TestInvalidEnvironmentValueRedactsSecretKeys(t *testing.T) {
+	got := invalidEnvironmentValue("DB_PRIMARY_PASSWORD", "do-not-print", "integer")
+	if strings.Contains(got, "do-not-print") || !strings.Contains(got, "<REDACTED>") {
+		t.Fatalf("secret value was not redacted: %s", got)
+	}
+}
+
 func TestLoad_ActiveEnvironmentVariablesMapToConfig(t *testing.T) {
 	tests := []struct {
 		name  string

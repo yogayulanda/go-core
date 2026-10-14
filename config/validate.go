@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"strings"
 )
 
@@ -59,6 +60,15 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 	if c.HTTP.TrustedProxyHops < 0 {
 		issues = append(issues, issue("http", "TrustedProxyHops", "TrustedProxyHops must be >= 0"))
 	}
+	if c.GRPC.Port < 1 || c.GRPC.Port > 65535 {
+		issues = append(issues, issue("grpc", "GRPC_PORT", "GRPC_PORT must be between 1 and 65535"))
+	}
+	if c.HTTP.Port < 1 || c.HTTP.Port > 65535 {
+		issues = append(issues, issue("http", "HTTP_PORT", "HTTP_PORT must be between 1 and 65535"))
+	}
+	if c.GRPC.Port == c.HTTP.Port {
+		issues = append(issues, issue("app", "GRPC_PORT/HTTP_PORT", "GRPC_PORT and HTTP_PORT must be different"))
+	}
 	if c.HTTP.PprofEnabled && (c.App.Environment == "prod" || c.App.Environment == "production") {
 		issues = append(issues, issue("http", "HTTP_PPROF_ENABLED", "pprof is forbidden in production"))
 	}
@@ -79,8 +89,8 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 		if db.ConnMaxIdleTime < 0 {
 			issues = append(issues, issue("database", "DB_"+strings.ToUpper(name)+"_CONN_MAX_IDLE_TIME", "DB_"+strings.ToUpper(name)+"_CONN_MAX_IDLE_TIME must be >= 0"))
 		}
-		if db.Port < 0 {
-			issues = append(issues, issue("database", "DB_"+strings.ToUpper(name)+"_PORT", "DB_"+strings.ToUpper(name)+"_PORT must be >= 0"))
+		if db.Port < 0 || db.Port > 65535 || (db.Port == 0 && db.DSN == "") {
+			issues = append(issues, issue("database", "DB_"+strings.ToUpper(name)+"_PORT", "DB_"+strings.ToUpper(name)+"_PORT must be between 1 and 65535 when set or when DSN is not set"))
 		}
 	}
 
@@ -139,8 +149,20 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 		}
 	}
 
-	if c.Auth.InternalJWT.Enabled && strings.TrimSpace(c.Auth.InternalJWT.PublicKey) == "" {
-		issues = append(issues, issue("auth", "InternalJWT.PublicKey", "InternalJWT PublicKey is required when enabled"))
+	if c.Auth.InternalJWT.Enabled {
+		hasPublicKey := strings.TrimSpace(c.Auth.InternalJWT.PublicKey) != ""
+		jwksEndpoint := strings.TrimSpace(c.Auth.InternalJWT.JWKSEndpoint)
+		hasJWKSEndpoint := jwksEndpoint != ""
+		if hasPublicKey == hasJWKSEndpoint {
+			message := "InternalJWT requires exactly one of PublicKey or JWKSEndpoint"
+			if hasPublicKey {
+				message += "; both are set; remove one"
+			}
+			issues = append(issues, issue("auth", "InternalJWT.KeySource", message))
+		}
+		if hasJWKSEndpoint && !validJWKSURL(jwksEndpoint, c.App.Environment) {
+			issues = append(issues, issue("auth", "InternalJWT.JWKSEndpoint", "InternalJWT JWKSEndpoint must be an https URL (http is allowed only in local)"))
+		}
 	}
 	if c.Auth.InternalJWT.Enabled && c.Auth.InternalJWT.Leeway < 0 {
 		issues = append(issues, issue("auth", "InternalJWT.Leeway", "InternalJWT Leeway must be >= 0 when enabled"))
@@ -170,6 +192,17 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 	}
 
 	return issues
+}
+
+func validJWKSURL(raw, environment string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	if strings.EqualFold(parsed.Scheme, "https") {
+		return true
+	}
+	return environment == "local" && strings.EqualFold(parsed.Scheme, "http")
 }
 
 func issue(section, field, message string) ValidationIssue {

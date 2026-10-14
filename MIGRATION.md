@@ -2,6 +2,13 @@
 
 This guide covers migration from the public v1.0.x line to v1.1.0.
 
+## Upgrading to v1.2.1
+
+- A non-empty malformed integer or boolean environment value now fails during `config.Load` instead of silently using its default. Boolean variables accept exactly the values recognized by `strconv.ParseBool`: `1`, `t`, `T`, `TRUE`, `true`, `True`, `0`, `f`, `F`, `FALSE`, `false`, and `False`. Values such as `yes`, `on`, and `off` are rejected.
+- Before upgrading, check deployment environment files and ConfigMaps for non-standard boolean spellings such as `yes`, `on`, and `off`, plus malformed integer values. For example, inspect manifests and env files with `grep -RniE '(^|[=:])[[:space:]]*(yes|no|on|off)([[:space:]]|$)' <deployment-config-paths>` and confirm integer settings contain decimal digits only.
+- Enabled Internal JWT verification requires exactly one key source. Choose `PublicKey` for a static key rotated through deployment, or `JWKSEndpoint` for automatic key rotation. Setting both is rejected at startup. JWKS URLs must use HTTPS except in `APP_ENV=local`.
+- HTTP and gRPC ports, and configured database alias ports, must be within 1–65535; HTTP and gRPC ports must differ.
+
 ## Public v1.0.x History
 
 - `v1.0.0` established the public stable baseline.
