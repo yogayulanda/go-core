@@ -22,6 +22,9 @@ func Load(opts ...Option) (*Config, error) {
 	for _, opt := range opts {
 		opt()
 	}
+	if err := validateNumericEnvironment(); err != nil {
+		return nil, err
+	}
 
 	serviceName := strings.TrimSpace(getString("SERVICE_NAME", ""))
 	dbs, err := loadDatabases()
@@ -173,8 +176,8 @@ func validateComposeFields(name string, cfg DBConfig) error {
 	if cfg.Host == "" {
 		return fmt.Errorf("DB_%s_HOST is required when DSN is not set", strings.ToUpper(name))
 	}
-	if cfg.Port <= 0 {
-		return fmt.Errorf("DB_%s_PORT must be > 0 when DSN is not set", strings.ToUpper(name))
+	if cfg.Port < 1 || cfg.Port > 65535 {
+		return fmt.Errorf("DB_%s_PORT must be between 1 and 65535 when DSN is not set", strings.ToUpper(name))
 	}
 	if cfg.Name == "" {
 		return fmt.Errorf("DB_%s_NAME is required when DSN is not set", strings.ToUpper(name))
@@ -292,6 +295,75 @@ func getBool(key string, defaultVal bool) bool {
 		return defaultVal
 	}
 	return parsed
+}
+
+func validateNumericEnvironment() error {
+	intKeys := []string{"GRPC_PORT", "HTTP_PORT"}
+	boolKeys := []string{"DIAG_ENABLED", "HTTP_PPROF_ENABLED", "METRICS_ENABLED"}
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if strings.HasPrefix(name, "DB_") && strings.HasSuffix(name, "_PORT") && len(name) > len("DB__PORT") {
+			intKeys = append(intKeys, name)
+		}
+	}
+	intKeys = uniqueSortedStrings(intKeys)
+	boolKeys = uniqueSortedStrings(boolKeys)
+
+	var invalid []string
+	for _, key := range intKeys {
+		value := os.Getenv(key)
+		if value == "" {
+			continue
+		}
+		if _, err := strconv.Atoi(value); err != nil {
+			invalid = append(invalid, invalidEnvironmentValue(key, value, "integer (base-10)"))
+		}
+	}
+	for _, key := range boolKeys {
+		value := os.Getenv(key)
+		if value == "" {
+			continue
+		}
+		if _, err := strconv.ParseBool(value); err != nil {
+			invalid = append(invalid, invalidEnvironmentValue(key, value, "boolean accepted by strconv.ParseBool"))
+		}
+	}
+	if len(invalid) == 0 {
+		return nil
+	}
+	sort.Strings(invalid)
+	return fmt.Errorf("invalid environment values:\n%s", strings.Join(invalid, "\n"))
+}
+
+func uniqueSortedStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	unique := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		unique = append(unique, value)
+	}
+	sort.Strings(unique)
+	return unique
+}
+
+func invalidEnvironmentValue(key, value, expected string) string {
+	if isSecretEnvironmentKey(key) {
+		value = "<REDACTED>"
+	}
+	return fmt.Sprintf("%s=%q: expected %s", key, value, expected)
+}
+
+func isSecretEnvironmentKey(key string) bool {
+	key = strings.ToLower(strings.ReplaceAll(key, "_", ""))
+	for _, marker := range []string{"password", "masterkey", "privatekey", "keyfile", "secret", "dsn", "jksfile"} {
+		if strings.Contains(key, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func getStringSlice(key string) []string {

@@ -59,6 +59,15 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 	if c.HTTP.TrustedProxyHops < 0 {
 		issues = append(issues, issue("http", "TrustedProxyHops", "TrustedProxyHops must be >= 0"))
 	}
+	if c.GRPC.Port < 1 || c.GRPC.Port > 65535 {
+		issues = append(issues, issue("grpc", "GRPC_PORT", "GRPC_PORT must be between 1 and 65535"))
+	}
+	if c.HTTP.Port < 1 || c.HTTP.Port > 65535 {
+		issues = append(issues, issue("http", "HTTP_PORT", "HTTP_PORT must be between 1 and 65535"))
+	}
+	if c.GRPC.Port == c.HTTP.Port {
+		issues = append(issues, issue("app", "GRPC_PORT/HTTP_PORT", "GRPC_PORT and HTTP_PORT must be different"))
+	}
 	if c.HTTP.PprofEnabled && (c.App.Environment == "prod" || c.App.Environment == "production") {
 		issues = append(issues, issue("http", "HTTP_PPROF_ENABLED", "pprof is forbidden in production"))
 	}
@@ -79,8 +88,8 @@ func (c *Config) ValidateIssues() []ValidationIssue {
 		if db.ConnMaxIdleTime < 0 {
 			issues = append(issues, issue("database", "DB_"+strings.ToUpper(name)+"_CONN_MAX_IDLE_TIME", "DB_"+strings.ToUpper(name)+"_CONN_MAX_IDLE_TIME must be >= 0"))
 		}
-		if db.Port < 0 {
-			issues = append(issues, issue("database", "DB_"+strings.ToUpper(name)+"_PORT", "DB_"+strings.ToUpper(name)+"_PORT must be >= 0"))
+		if db.Port < 0 || db.Port > 65535 || (db.Port == 0 && db.DSN == "") {
+			issues = append(issues, issue("database", "DB_"+strings.ToUpper(name)+"_PORT", "DB_"+strings.ToUpper(name)+"_PORT must be between 1 and 65535 when set or when DSN is not set"))
 		}
 	}
 

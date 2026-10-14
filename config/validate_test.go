@@ -90,26 +90,13 @@ func TestValidate_InternalJWTIncludeExcludeConflict(t *testing.T) {
 }
 
 func TestValidate_InternalJWTIncludeOnlyValid(t *testing.T) {
-	cfg := &Config{
-		App: AppConfig{
-			ServiceName:     "svc",
-			Environment:     "dev",
-			ShutdownTimeout: 25 * time.Second,
-		},
-		Auth: AuthConfig{
-			InternalJWT: InternalJWTConfig{
-				Enabled:        true,
-				PublicKey:      "dummy",
-				Leeway:         10 * time.Second,
-				IncludeMethods: []string{"/a.b.C/Call"},
-			},
-		},
-		HTTP: HTTPConfig{
-			ReadHeaderTimeout: 5 * time.Second,
-			ReadTimeout:       15 * time.Second,
-			WriteTimeout:      60 * time.Second,
-			IdleTimeout:       120 * time.Second,
-			MaxBodyBytes:      1 << 20,
+	cfg := validBaseConfig()
+	cfg.Auth = AuthConfig{
+		InternalJWT: InternalJWTConfig{
+			Enabled:        true,
+			PublicKey:      "dummy",
+			Leeway:         10 * time.Second,
+			IncludeMethods: []string{"/a.b.C/Call"},
 		},
 	}
 
@@ -201,35 +188,18 @@ func TestValidate_MigrationAutoRunRequiresExplicitDBAndDir(t *testing.T) {
 }
 
 func TestValidate_MigrationDBMustExistWithNormalizedAlias(t *testing.T) {
-	cfg := &Config{
-		App: AppConfig{
-			ServiceName:     "svc",
-			Environment:     "dev",
-			ShutdownTimeout: 25 * time.Second,
-		},
-		Databases: map[string]DBConfig{
-			"transaction_history": {
-				Driver:          "sqlserver",
-				DSN:             "sqlserver://example",
-				MaxOpenConns:    10,
-				MaxIdleConns:    5,
-				ConnMaxIdleTime: time.Minute,
-				ConnMaxLifetime: time.Minute,
-			},
-		},
-		Migration: MigrationConfig{
-			AutoRun: true,
-			DBName:  "Transaction_History",
-			Dir:     "migrations/history",
-		},
-		HTTP: HTTPConfig{
-			ReadHeaderTimeout: 5 * time.Second,
-			ReadTimeout:       15 * time.Second,
-			WriteTimeout:      60 * time.Second,
-			IdleTimeout:       120 * time.Second,
-			MaxBodyBytes:      1 << 20,
+	cfg := validBaseConfig()
+	cfg.Databases = map[string]DBConfig{
+		"transaction_history": {
+			Driver:          "sqlserver",
+			DSN:             "sqlserver://example",
+			MaxOpenConns:    10,
+			MaxIdleConns:    5,
+			ConnMaxIdleTime: time.Minute,
+			ConnMaxLifetime: time.Minute,
 		},
 	}
+	cfg.Migration = MigrationConfig{AutoRun: true, DBName: "Transaction_History", Dir: "migrations/history"}
 
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -320,13 +290,8 @@ func TestValidate_ReturnsValidationErrorsType(t *testing.T) {
 func TestValidate_AppEnvironmentAllowedValues(t *testing.T) {
 	for _, environment := range []string{"local", "dev", "sit", "uat", "prod"} {
 		t.Run(environment, func(t *testing.T) {
-			cfg := &Config{App: AppConfig{ServiceName: "svc", Environment: environment, ShutdownTimeout: 25 * time.Second}, HTTP: HTTPConfig{
-				ReadHeaderTimeout: 5 * time.Second,
-				ReadTimeout:       15 * time.Second,
-				WriteTimeout:      60 * time.Second,
-				IdleTimeout:       120 * time.Second,
-				MaxBodyBytes:      1 << 20,
-			}}
+			cfg := validBaseConfig()
+			cfg.App.Environment = environment
 			if err := cfg.Validate(); err != nil {
 				t.Fatalf("valid APP_ENV %q rejected: %v", environment, err)
 			}
@@ -339,6 +304,14 @@ func TestValidate_AppEnvironmentAllowedValues(t *testing.T) {
 				t.Fatalf("expected APP_ENV validation error, got %v", err)
 			}
 		})
+	}
+}
+
+func validBaseConfig() *Config {
+	return &Config{
+		App:  AppConfig{ServiceName: "svc", Environment: "dev", ShutdownTimeout: 25 * time.Second},
+		GRPC: GRPCConfig{Port: 50051},
+		HTTP: HTTPConfig{Port: 8080, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second, MaxBodyBytes: 1 << 20},
 	}
 }
 
@@ -359,5 +332,58 @@ func TestValidate_HTTPTimeoutRelationship(t *testing.T) {
 	}
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "WriteTimeout must be greater") {
 		t.Fatalf("expected timeout relationship validation error, got %v", err)
+	}
+}
+
+func TestValidate_PortRangesAndDistinctListeners(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*Config)
+		want  string
+	}{
+		{
+			name: "grpc port zero",
+			setup: func(cfg *Config) {
+				cfg.GRPC.Port = 0
+			},
+			want: "GRPC_PORT must be between 1 and 65535",
+		},
+		{
+			name: "http port too high",
+			setup: func(cfg *Config) {
+				cfg.HTTP.Port = 70000
+			},
+			want: "HTTP_PORT must be between 1 and 65535",
+		},
+		{
+			name: "listener ports equal",
+			setup: func(cfg *Config) {
+				cfg.HTTP.Port = cfg.GRPC.Port
+			},
+			want: "GRPC_PORT and HTTP_PORT must be different",
+		},
+		{
+			name: "database port zero",
+			setup: func(cfg *Config) {
+				cfg.Databases = map[string]DBConfig{"primary": {}}
+			},
+			want: "DB_PRIMARY_PORT must be between 1 and 65535",
+		},
+		{
+			name: "database port too high",
+			setup: func(cfg *Config) {
+				cfg.Databases = map[string]DBConfig{"primary": {DSN: "mysql://example", Port: 70000}}
+			},
+			want: "DB_PRIMARY_PORT must be between 1 and 65535",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := validBaseConfig()
+			test.setup(cfg)
+			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("expected %q validation error, got %v", test.want, err)
+			}
+		})
 	}
 }
