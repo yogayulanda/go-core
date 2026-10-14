@@ -84,6 +84,8 @@ No `GODEBUG` compatibility override is configured by go-core. Run service-specif
 
 An interleaved A/B/C comparison was run on 2026-10-14 with `GOMAXPROCS=4`, 20 rounds per variant, and `-run='^$' -benchmem -count=1` for each invocation. Benchstat found no statistically significant latency difference for the gateway or unary interceptor chain:
 
+Raw samples and complete benchstat outputs are archived under [`docs/benchmarks/2026-10-14-go-1.26/`](docs/benchmarks/2026-10-14-go-1.26/).
+
 | Benchmark | A: main / Go 1.24.13 | B: main / Go 1.26.9 | C: branch / Go 1.26.9 | A to B | B to C |
 |---|---:|---:|---:|---:|---:|
 | Gateway handler via `httptest.NewRecorder` | 28.08 us/op | 27.15 us/op | 29.62 us/op | -3.3%, p=0.799 | +9.1%, p=0.398 |

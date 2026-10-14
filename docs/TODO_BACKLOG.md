@@ -30,6 +30,7 @@ This backlog tracks work intentionally left outside the completed foundation upd
 - Reassess residual dependency advisories in `SECURITY_ADVISORIES.md` on each Go toolchain patch and minor upgrade.
 - Run the interleaved hot-path benchmark suite on a stable Linux CI runner and retain benchstat evidence as a regression guard; WSL is too noisy for reliable sub-10% decisions.
 - Add an end-to-end gateway benchmark that traverses grpc-gateway to a gRPC handler over bufconn; the current `httptest.NewRecorder` benchmark stops at an in-process HTTP handler.
+- Successful plain `runtime.ServeMux.HandlePath` handlers that do not call gRPC currently have no access log. gRPC-backed routes log in the gRPC interceptor and Raw routes log in the envelope boundary. Decide whether to add a single gateway access log for non-Raw direct handlers in a follow-up; leave behavior unchanged for v1.2.0.
 - Confirm deployment termination grace period exceeds `DrainDelay + ShutdownTimeout` (default total 28 seconds, below the common 30-second value but leaves little margin).
 
 ## Deferred Platform Work

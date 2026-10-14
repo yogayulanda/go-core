@@ -1,0 +1,160 @@
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   45966	     22249 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   50710	     20145 ns/op	    8452 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	2.574s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   48774	     25214 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   57234	     22150 ns/op	    8474 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	3.993s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   45681	     27947 ns/op	   13012 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   41241	     24961 ns/op	    8467 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	2.895s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   45130	     25749 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   59742	     18730 ns/op	    8441 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	2.798s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   54747	     20114 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   56350	     20884 ns/op	    8448 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	2.746s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   60216	     23063 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   56954	     19922 ns/op	    8454 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	2.964s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   52904	     25199 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   56004	     19950 ns/op	    8458 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	2.924s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   55705	     22745 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   59668	     20202 ns/op	    8458 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	2.920s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   52110	     23739 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   56646	     23680 ns/op	    8475 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	3.060s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   52687	     23219 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   52422	     19716 ns/op	    8445 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	2.750s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   47242	     22819 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   60586	     19337 ns/op	    8444 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	3.762s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   46820	     27149 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   55600	     19348 ns/op	    8460 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	3.823s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   66672	     20507 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   61561	     19063 ns/op	    8453 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	3.944s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   57524	     22756 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   50306	     21049 ns/op	    8452 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	2.852s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   49004	     22478 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   62300	     23706 ns/op	    8467 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	3.054s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   53814	     23114 ns/op	   13010 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   49441	     20570 ns/op	    8454 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	2.765s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   41457	     28348 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   36400	     48204 ns/op	    8486 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	3.603s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   17564	     61812 ns/op	   13012 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   17476	     59239 ns/op	    8477 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	3.472s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   27043	     61780 ns/op	   13012 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   32301	     34843 ns/op	    8462 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	4.709s
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+BenchmarkGatewayHTTPEndToEnd-4      	   35504	     35167 ns/op	   13011 B/op	     119 allocs/op
+BenchmarkGatewayRawHTTPEndToEnd-4   	   41104	     32796 ns/op	    8462 B/op	     111 allocs/op
+PASS
+ok  	github.com/yogayulanda/go-core/server/gateway	3.277s

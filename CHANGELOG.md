@@ -9,7 +9,7 @@ This changelog complements:
 
 ## [Unreleased]
 
-## [1.2.0] - Unreleased
+## [1.2.0] - 2026-10-14
 
 ### Changed
 - Require Go 1.26.0 or newer as determined by the dependency graph; validate builds and CI with Go 1.26.9.

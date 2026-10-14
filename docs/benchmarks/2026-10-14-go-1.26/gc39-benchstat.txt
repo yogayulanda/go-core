@@ -1,0 +1,21 @@
+goos: linux
+goarch: amd64
+pkg: github.com/yogayulanda/go-core/server/gateway
+cpu: 13th Gen Intel(R) Core(TM) i7-1355U
+                         │ docs/benchmarks/2026-10-14-go-1.26/gc39-before-go1.26.9.txt │ docs/benchmarks/2026-10-14-go-1.26/gc39-after-go1.26.9.txt │
+                         │                           sec/op                            │               sec/op                 vs base               │
+GatewayHTTPEndToEnd-4                                                      23.37µ ± 9%                          23.48µ ± 16%       ~ (p=0.461 n=20)
+GatewayRawHTTPEndToEnd-4                                                                                        20.73µ ± 14%
+geomean                                                                    23.37µ                               22.06µ        +0.48%
+
+                         │ docs/benchmarks/2026-10-14-go-1.26/gc39-before-go1.26.9.txt │ docs/benchmarks/2026-10-14-go-1.26/gc39-after-go1.26.9.txt │
+                         │                            B/op                             │                B/op                  vs base               │
+GatewayHTTPEndToEnd-4                                                     12.35Ki ± 0%                          12.71Ki ± 0%  +2.92% (p=0.000 n=20)
+GatewayRawHTTPEndToEnd-4                                                                                        8.260Ki ± 0%
+geomean                                                                   12.35Ki                               10.24Ki       +2.92%
+
+                         │ docs/benchmarks/2026-10-14-go-1.26/gc39-before-go1.26.9.txt │ docs/benchmarks/2026-10-14-go-1.26/gc39-after-go1.26.9.txt │
+                         │                          allocs/op                          │              allocs/op               vs base               │
+GatewayHTTPEndToEnd-4                                                       116.0 ± 0%                            119.0 ± 0%  +2.59% (p=0.000 n=20)
+GatewayRawHTTPEndToEnd-4                                                                                          111.0 ± 0%
+geomean                                                                     116.0                                 114.9       +2.59%
